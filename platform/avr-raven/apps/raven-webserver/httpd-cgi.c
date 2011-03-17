@@ -103,8 +103,8 @@ static const char *states[] = {
   running,
   called};
 
-  static char sensor_temperature[12]="Not Enabled";
-  static char sensor_extvoltage[12]="Not Enabled";
+char sensor_temperature[12]="Not Enabled";
+char sensor_extvoltage[12]="Not Enabled";
   static unsigned long last_tempupdate,last_extvoltageupdate;
   extern unsigned long seconds;
 #if RADIOSTATS
@@ -290,7 +290,7 @@ generate_sensor_readings(void *arg)
   uint16_t h,m,s;
   static const char httpd_cgi_sensor0[] HTTPD_STRING_ATTR = "[Updated %d seconds ago]<br><br>";
   static const char httpd_cgi_sensor1[] HTTPD_STRING_ATTR = "<em>Temperature:</em> %s<br>";
-  static const char httpd_cgi_sensor2[] HTTPD_STRING_ATTR = "<em>Voltage:</em> %s<br>";
+  static const char httpd_cgi_sensor2[] HTTPD_STRING_ATTR = "<em>External Voltage:</em> %s<br>";
   static const char httpd_cgi_sensor3[] HTTPD_STRING_ATTR = "<em>Up time:</em> %02d:%02d:%02d<br>";
 
   numprinted=0;
@@ -301,6 +301,7 @@ generate_sensor_readings(void *arg)
   numprinted+=httpd_snprintf((char *)uip_appdata+numprinted, uip_mss()-numprinted, httpd_cgi_sensor1, sensor_temperature);
 
 #if 0
+  static const char httpd_cgi_sensor21[] HTTPD_STRING_ATTR = "<em>AVcc:</em> %d<br>";
 //Measuring AVcc might be useful to check on battery condition but on ext power it's always 3v3
   ADMUX =0x1E;              //Select AREF as reference, measure 1.1 volt bandgap reference.
 //ADMUX =0x5E;              //Select AVCC as reference, measure 1.1 volt bandgap reference.
@@ -310,6 +311,7 @@ generate_sensor_readings(void *arg)
   ADCSRA|=1<<ADSC;          //Start another conversion
   while (ADCSRA&(1<<ADSC)); //Wait till done
   h=1131632UL/ADC;          //Get supply voltage
+  numprinted+=httpd_snprintf((char *)uip_appdata + numprinted, uip_mss() - numprinted, httpd_cgi_sensor21, ADC);
 #endif
 
   numprinted+=httpd_snprintf((char *)uip_appdata+numprinted, uip_mss()-numprinted, httpd_cgi_sensor2, sensor_extvoltage);
@@ -330,7 +332,7 @@ generate_radio_stats(void *arg)
   uint16_t h,m,s;
   uint8_t p1,p2;
   static const char httpd_cgi_sensor4[] HTTPD_STRING_ATTR = "<em>Radio on:</em> %02d:%02d:%02d (%d.%02d%%)<br>";
-  static const char httpd_cgi_sensor5[] HTTPD_STRING_ATTR = "<em>Packets:</em> Tx=%5d Rx=%5d TxL=%5d RxL=%5d RSSI=%2d\n";
+  static const char httpd_cgi_sensor5[] HTTPD_STRING_ATTR = "<em>Packets:</em> Tx=%5d Rx=%5d TxL=%5d RxL=%5d RSSI=%2ddb\n";
 
   s=(10000UL*radioontime)/seconds;
   p1=s/100;
@@ -343,7 +345,7 @@ generate_radio_stats(void *arg)
   numprinted =httpd_snprintf((char *)uip_appdata             , uip_mss()             , httpd_cgi_sensor4,\
     h,m,s,p1,p2);  
   numprinted+=httpd_snprintf((char *)uip_appdata + numprinted, uip_mss() - numprinted, httpd_cgi_sensor5,\
-    RF230_sendpackets,RF230_receivepackets,RF230_sendfail,RF230_receivefail,RF230_rsigsi);  
+    RF230_sendpackets,RF230_receivepackets,RF230_sendfail,RF230_receivefail,-91+3*(rf230_get_raw_rssi()-1));  
  
   return numprinted;
 }

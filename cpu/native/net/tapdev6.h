@@ -44,4 +44,5 @@ u8_t tapdev_send(uip_lladdr_t *lladdr);
 u16_t tapdev_poll(void);
 void tapdev_do_send(void);
 void tapdev_exit(void); //math
+
 #endif /* __TAPDEV_H__ */

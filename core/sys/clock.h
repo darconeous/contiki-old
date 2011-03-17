@@ -92,6 +92,8 @@ CCIF clock_time_t clock_time(void);
 
 void clock_delay(unsigned int);
 
+void clock_sleep_with_max_duration(unsigned int max_duration);
+
 /**
  * A second, measured in system clock time.
  *

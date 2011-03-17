@@ -5,13 +5,21 @@
 
 ## General Flags
 PROJECT = ravenlcd_3290
-MCU = atmega3290
+MCU = atmega3290p
 TARGET = $(PROJECT).elf
 CC = avr-gcc
 
 ## Options common to compile, link and assembly rules
 COMMON = -mmcu=$(MCU)
+
+RAVEN_CONF_BATTERY_OPERATED=1
+
+ifdef RAVEN_CONF_BATTERY_OPERATED
+COMMON += -DF_CPU=1000000UL
+else
 COMMON += -DF_CPU=8000000UL
+endif
+
 
 ## Compile options common for all C compilation units.
 CFLAGS = $(COMMON) $(CEXTRA)
@@ -67,7 +75,7 @@ $(TARGET): $(OBJECTS)
 
 size: ${TARGET}
 	@echo
-	@avr-size -C --mcu=${MCU} ${TARGET}
+	@avr-size ${TARGET}
 
 ## Clean target
 .PHONY: clean

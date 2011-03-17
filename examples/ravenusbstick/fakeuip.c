@@ -108,8 +108,8 @@ chksum(u16_t sum, const u8_t *data, u16_t len)
 static u16_t
 upper_layer_chksum(u8_t proto)
 {
-  u16_t upper_layer_len;
-  u16_t sum;
+  volatile static u16_t upper_layer_len;
+  volatile static u16_t sum;
   
   upper_layer_len = (((u16_t)(UIP_IP_BUF->len[0]) << 8) + UIP_IP_BUF->len[1]) ;
   

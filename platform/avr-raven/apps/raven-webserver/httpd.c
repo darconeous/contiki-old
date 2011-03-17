@@ -309,8 +309,9 @@ generate_header(void *hstr)
 char http_htm[10]   PROGMEM ="text/html";
 char http_css[ 9]   PROGMEM ="text/css";
 const char httpd_mime_htm[] HTTPD_STRING_ATTR = "text/html";
-const char httpd_mime_css[] HTTPD_STRING_ATTR = "text/css";
-const char httpd_mime_png[] HTTPD_STRING_ATTR = "image/png";
+//const char httpd_mime_css[] HTTPD_STRING_ATTR = "text/css";
+const char httpd_mime_css[] HTTPD_STRING_ATTR = "text/css\r\nCache-Control: max-age=10000";
+const char httpd_mime_png[] HTTPD_STRING_ATTR = "image/png\r\nCache-Control: max-age=10000";
 const char httpd_mime_gif[] HTTPD_STRING_ATTR = "image/gif";
 const char httpd_mime_jpg[] HTTPD_STRING_ATTR = "image/jpeg";
 const char httpd_mime_txt[] HTTPD_STRING_ATTR = "text/plain";
@@ -335,9 +336,9 @@ PT_THREAD(send_headers(struct httpd_state *s, const char *statushdr))
     ptr++;
     if(httpd_strncmp(ptr, &httpd_mime_htm[5],3)== 0 ||httpd_strncmp(ptr, &httpd_shtml[1], 4) == 0) {
       PSOCK_GENERATOR_SEND(&s->sout, generate_header, &httpd_mime_htm );
-    } else if(httpd_strcmp(ptr, &httpd_mime_css[5]) == 0) {
+    } else if(httpd_strcmp(ptr, PSTR("css")) == 0) {
       PSOCK_GENERATOR_SEND(&s->sout, generate_header, &httpd_mime_css );
-    } else if(httpd_strcmp(ptr, &httpd_mime_png[6]) == 0) {
+    } else if(httpd_strcmp(ptr, PSTR("png")) == 0) {
       PSOCK_GENERATOR_SEND(&s->sout, generate_header, &httpd_mime_png );
     } else if(httpd_strcmp(ptr, &httpd_mime_gif[6])== 0) {
       PSOCK_GENERATOR_SEND(&s->sout, generate_header, &httpd_mime_gif );

@@ -60,7 +60,7 @@ tapdev_output(void)
 static void
 pollhandler(void)
 {
-  process_poll(&tapdev_process);
+  //process_poll(&tapdev_process);
   uip_len = tapdev_poll();
 
   if(uip_len > 0) {

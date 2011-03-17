@@ -55,13 +55,35 @@ void leds_init(void);
  */
 void leds_blink(void);
 
-#define LEDS_GREEN  1
-#define LEDS_YELLOW 2
-#define LEDS_RED    4
-#define LEDS_BLUE   LEDS_YELLOW	/* Tmote Sky is colorblind? */
-#define leds_blue   leds_yellow
+#ifndef LEDS_GREEN
+#define LEDS_GREEN  (1<<0)
+#endif
 
-#define LEDS_ALL    7
+#ifndef LEDS_YELLOW
+#define LEDS_YELLOW (1<<1)
+#endif
+
+#ifndef LEDS_RED
+#define LEDS_RED    (1<<2)
+#endif
+
+#ifndef LEDS_BLUE
+#define LEDS_BLUE   LEDS_YELLOW	/* Tmote Sky is colorblind? */
+#endif
+
+#define LEDS_ALL    (~0)
+
+#ifndef LEDS_STAT_TX
+#define LEDS_STAT_TX		LEDS_RED
+#endif
+
+#ifndef LEDS_STAT_RX
+#define LEDS_STAT_RX		LEDS_GREEN
+#endif
+
+#ifndef LEDS_STAT_ONLINE
+#define LEDS_STAT_ONLINE	LEDS_BLUE
+#endif
 
 /**
  * Returns the current status of all leds (respects invert)

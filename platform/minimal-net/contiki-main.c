@@ -34,6 +34,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
 #include <time.h>
 #include <sys/select.h>
 #include <unistd.h>
@@ -56,6 +58,7 @@ PROCINIT(&etimer_process, &tcpip_process, &wpcap_process, &serial_line_process);
 #else /* __CYGWIN__ */
 PROCINIT(&etimer_process, &tapdev_process, &tcpip_process, &serial_line_process);
 #endif /* __CYGWIN__ */
+
 
 #if UIP_CONF_IPV6
 /*---------------------------------------------------------------------------*/
@@ -93,14 +96,24 @@ sprint_ip6(uip_ip6addr_t addr)
 #endif /* UIP_CONF_IPV6 */
 /*---------------------------------------------------------------------------*/
 
+static void
+interrupt(int sig)
+{
+  exit(0);
+}
+/*---------------------------------------------------------------------------*/
+
 /*---------------------------------------------------------------------------*/
 int
 main(void)
 {
+  signal(SIGINT, interrupt);
 
   process_init();
 
   procinit_init();
+
+  stderr = stdout;
 
   ctimer_init();
 
@@ -109,24 +122,32 @@ main(void)
   /* Set default IP addresses if not specified */
 #if !UIP_CONF_IPV6
   uip_ipaddr_t addr;
+
+  uip_ethaddr.addr[0]=0x20;
+  uip_ethaddr.addr[4]=0x13;
+  uip_ethaddr.addr[5]=0x37;
   
   uip_gethostaddr(&addr);
   if (addr.u8[0]==0) {
-    uip_ipaddr(&addr, 10,1,1,1);
+//    uip_ipaddr(&addr, 10,1,1,1);
+    uip_ipaddr(&addr, 172,18,0,2);
   }
+  
   printf("IP Address:  %d.%d.%d.%d\n", uip_ipaddr_to_quad(&addr));
   uip_sethostaddr(&addr);
 
   uip_getnetmask(&addr);
   if (addr.u8[0]==0) {
-    uip_ipaddr(&addr, 255,0,0,0);
+//    uip_ipaddr(&addr, 255,0,0,0);
+    uip_ipaddr(&addr, 255,255,0,0);
     uip_setnetmask(&addr);
   }
   printf("Subnet Mask: %d.%d.%d.%d\n", uip_ipaddr_to_quad(&addr));
 
   uip_getdraddr(&addr);
   if (addr.u8[0]==0) {
-    uip_ipaddr(&addr, 10,1,1,100);
+//    uip_ipaddr(&addr, 10,1,1,100);
+    uip_ipaddr(&addr, 172,18,0,1);
     uip_setdraddr(&addr);
   }
   printf("Def. Router: %d.%d.%d.%d\n", uip_ipaddr_to_quad(&addr));
@@ -152,22 +173,42 @@ main(void)
 
   /* Make standard output unbuffered. */
   setvbuf(stdout, (char *)NULL, _IONBF, 0);
-
   while(1) {
     fd_set fds;
     int n;
     struct timeval tv;
-    
+    clock_time_t next_event;
+	
     n = process_run();
-    /*    if(n > 0) {
-      printf("%d processes in queue\n");
-      }*/
+	next_event = etimer_next_expiration_time()-clock_time();
 
-    tv.tv_sec = 0;
-    tv.tv_usec = 1;
+#if DEBUG_SLEEP
+        if(n > 0) {
+      printf("%d events pending\n",n);
+      } else {
+      printf("next event: T-%.03f\n",(double)next_event/(double)CLOCK_SECOND);
+	  }
+#endif
+
+#ifdef __CYGWIN__
+	// wpcap doesn't appear to support select, so
+	// we can't idle the process on windows. :(
+	next_event = 0;
+#endif
+
+	if(next_event>CLOCK_SECOND*2)
+		next_event = CLOCK_SECOND*2;
+    tv.tv_sec = n?0:next_event/CLOCK_SECOND;
+    tv.tv_usec = n?0:next_event%1000*1000;
+
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
+#ifdef __CYGWIN__
     select(1, &fds, NULL, NULL, &tv);
+#else
+    FD_SET(tapdev_fd(), &fds);
+    select(tapdev_fd()+1, &fds, NULL, NULL, &tv);
+#endif
 
     if(FD_ISSET(STDIN_FILENO, &fds)) {
       char c;
@@ -175,6 +216,7 @@ main(void)
 	serial_line_input_byte(c);
       }
     }
+	process_poll(&tapdev_process);
     etimer_request_poll();
   }
   

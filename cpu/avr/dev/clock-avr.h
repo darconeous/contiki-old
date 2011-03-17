@@ -36,6 +36,14 @@
    */ \
   TIMSK = _BV (OCIE0);
 
+#define OCRPreserveState() unsigned char \
+	assr = ASSR, tcnt0 = TCNT0, ocr0 = OCR0, tccr0=TCCR0, tifr=TIFR, timsk=TIMSK
+
+#define OCRReset() TIMSK = 0;
+
+#define OCRRestoreState() \
+	ASSR = assr, TCNT0 = tcnt0, OCR0 = ocr0, TCCR0 = tccr0, TIFR = tifr, TIMSK = timsk
+
 #elif defined (__AVR_ATmega1284P__) || (__AVR_AT90USB1287__) || (__AVR_ATmega1281__)
 /*
   The Raven has a 32768Hz watch crystal that can be used to clock the timer
@@ -75,6 +83,15 @@
    * counter value in TCNT2 is cleared automatically. \
    */ \
   TIMSK2 = _BV (OCIE2A);
+  
+#define OCRPreserveState() unsigned char \
+	assr = ASSR, tcnt2 = TCNT2, ocr2a = OCR2A, tccr2A=TCCR2A, tccr2B=TCCR2B, tifr2=TIFR2, timsk2=TIMSK2
+
+#define OCRReset() TIMSK2 = 0;
+
+#define OCRRestoreState() \
+	ASSR = assr, TCNT2 = tcnt2, OCR2A = ocr2a, TCCR2A = tccr2a, TCCR2B = tccr2b, TIFR2 = tifr2, TIMSK2 = timsk2
+
 #else
 #define AVR_OUTPUT_COMPARE_INT TIMER0_COMPA_vect
 #define OCRSetup() \
@@ -108,7 +125,16 @@
    * counter value in TCNT0 is cleared automatically. \
    */ \
   TIMSK0 = _BV (OCIE0A);
+
+#define OCRPreserveState() unsigned char \
+	assr = ASSR, tcnt0 = TCNT0, ocr0a = OCR0A, tccr0A=TCCR0A, tccr0B=TCCR0B, tifr0=TIFR0, timsk0=TIMSK0
+
+#define OCRReset() TIMSK0 = 0;
+
+#define OCRRestoreState() \
+	ASSR = assr, TCNT0 = tcnt0, OCR0A = ocr0a, TCCR0A = tccr0a, TCCR0B = tccr0b, TIFR0 = tifr0, TIMSK0 = timsk0
 #endif /* AVR_CONF_USE32KCRYSTAL */
+
 
 #else
 #error "Setup CPU in clock-avr.h"

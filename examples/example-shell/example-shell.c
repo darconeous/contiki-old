@@ -70,16 +70,20 @@ PROCESS_THREAD(example_shell_process, ev, data)
   shell_irc_init();
   shell_netfile_init();
   /*shell_ping_init();*/ /* uIP ping */
+#ifndef __APPLE__
   shell_power_init();
+#endif
   /*shell_profile_init();*/
   shell_ps_init();
   /*shell_reboot_init();*/
+#ifndef __APPLE__
   shell_rime_debug_init();
   shell_rime_netcmd_init();
   shell_rime_ping_init(); /* Rime ping */
   shell_rime_sendcmd_init();
   shell_rime_sniff_init();
   shell_rime_init();
+#endif
   /*shell_rsh_init();*/
   shell_run_init();
   shell_sendtest_init();

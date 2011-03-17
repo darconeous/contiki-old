@@ -95,7 +95,7 @@
 /** USB RNDIS / Virtual com port setup **/
 
 #ifndef CDC_ECM_USES_INTERRUPT_ENDPOINT
-#define CDC_ECM_USES_INTERRUPT_ENDPOINT	0
+#define CDC_ECM_USES_INTERRUPT_ENDPOINT	1
 #endif
 
 #ifndef USB_ETH_EMULATE_WIFI

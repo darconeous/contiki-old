@@ -99,7 +99,7 @@ bool temp_initialized = false;
  *
  * \return                              EOF on error
  */
-static int find_temp(int16_t value, uint16_t* array, int count);
+static int find_temp(uint16_t value, uint16_t* array, int count);
 
 /*---------------------------------------------------------------------------*/
 
@@ -212,8 +212,8 @@ temp_get(temp_unit_t unit)
     } else /*unit == TEMP_UNIT_FAHRENHEIT*/{
         temp = find_temp(res, temp_table_fahrenheit, sizeof(temp_table_fahrenheit)/sizeof(int)) + TEMP_ZERO_OFFSET_FAHRENHEIT;
     }
-
-    return temp;
+	
+	return temp;
 }
 
 /*---------------------------------------------------------------------------*/
@@ -232,10 +232,10 @@ temp_get(temp_unit_t unit)
  *   \return         EOF on error
 */
 static int
-find_temp(int16_t value, uint16_t* array, int count)
+find_temp(uint16_t value, uint16_t* array, int count)
 {
     int i = 0;
-    int table_val = 0;
+    uint16_t table_val = 0;
     do{
         table_val = pgm_read_word(&array[i]);
         if (table_val < value) {

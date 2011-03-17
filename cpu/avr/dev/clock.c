@@ -11,9 +11,6 @@ static volatile uint8_t scount;
 volatile unsigned long seconds;
 
 /* Set RADIOSTATS to monitor radio on time (must also be set in the radio driver) */
-#if RF230BB && WEBSERVER
-#define RADIOSTATS 1
-#endif
 #if RADIOSTATS
 static volatile uint8_t rcount;
 volatile unsigned long radioontime;
@@ -101,11 +98,32 @@ clock_wait(int i)
   start = clock_time();
   while(clock_time() - start < (clock_time_t)i);
 }
+
+void
+clock_sleep_with_max_duration(unsigned int i) {
+  // This needs to be breakable by any interrupt, but stop before the expiration
+  // of the given duration. This is doable, but not trivial, so I will have to
+  // implement this later.
+
+  // TODO: Writeme!
+
+  // set_sleep_mode(SLEEP_MODE_IDLE);
+  // sleep_mode();
+
+/*
+  // The following is WRONG for this function because interrupts
+  // won't make the function break earlier.
+  clock_time_t start;
+  start = clock_time();
+  while(clock_time() - start < (clock_time_t)i);
+*/
+}
+
 /*---------------------------------------------------------------------------*/
 void
 clock_set_seconds(unsigned long sec)
 {
-    // TODO
+	seconds = sec;
 }
 
 unsigned long

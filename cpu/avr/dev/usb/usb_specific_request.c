@@ -100,8 +100,8 @@ Bool usb_user_read_request(U8 type, U8 request)
 				MSB(wLength) = Usb_read_byte();
 				if((usb_configuration_nb==USB_CONFIG_RNDIS)||(usb_configuration_nb==USB_CONFIG_RNDIS_DEBUG))
 					return rndis_send_encapsulated_command(wLength);
-				else
-					return FALSE;
+				else if((usb_configuration_nb==USB_CONFIG_ECM)||(usb_configuration_nb==USB_CONFIG_ECM_DEBUG))
+					return cdc_ecm_handle_send_encapsulated_command(wLength);
       			break;
 
   		case GET_ENCAPSULATED_COMMAND:
@@ -114,6 +114,8 @@ Bool usb_user_read_request(U8 type, U8 request)
 				MSB(wLength) = Usb_read_byte();
 				if((usb_configuration_nb==USB_CONFIG_RNDIS)||(usb_configuration_nb==USB_CONFIG_RNDIS_DEBUG))
 					return rndis_get_encapsulated_command();
+				else if((usb_configuration_nb==USB_CONFIG_ECM)||(usb_configuration_nb==USB_CONFIG_ECM_DEBUG))
+					return cdc_ecm_handle_get_encapsulated_command();
 				else
 					return FALSE;
       			break;
@@ -312,7 +314,15 @@ PGM_P usb_user_get_string(U8 string_type) {
 //! @param conf_nb Not used
 void usb_user_endpoint_init(U8 conf_nb)
 {
+	usb_eth_reset();
+
+#if defined(USB_HOOK_UNENUMERATED)
+	if(conf_nb==0)
+		USB_HOOK_UNENUMERATED();
+#endif
+
 	if(USB_CONFIG_HAS_DEBUG_PORT(conf_nb)) {
+		uart_usb_init();
 		uart_usb_configure_endpoints();
 	}
 
@@ -359,7 +369,6 @@ void usb_user_endpoint_init(U8 conf_nb)
 			break;	
 #endif
 	}
-	Led0_on();
 }
 
 #if USB_CONF_SERIAL

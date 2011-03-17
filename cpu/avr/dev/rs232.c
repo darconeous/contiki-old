@@ -205,11 +205,13 @@ rs232_print(uint8_t port, char *buf)
 {
   while(*buf) {
 #if ADD_CARRAGE_RETURNS_TO_SERIAL_OUTPUT
-    if(*buf=='\n') rs232_send(port, '\r');
-	if(*buf=='\r') buf++; else rs232_send(port, *buf++);
-#else
-    rs232_send(port, *buf++);
+    if(*buf=='\n')
+	  rs232_send(port, '\r');
+    if(*buf=='\r')
+      buf++;
+	else
 #endif
+      rs232_send(port, *buf++);
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -255,11 +257,11 @@ static FILE rs232_stdout = FDEV_SETUP_STREAM(rs232_stdout_putchar,
 int rs232_stdout_putchar(char c, FILE *stream)
 {
 #if ADD_CARRAGE_RETURNS_TO_SERIAL_OUTPUT
-  if(c=='\n') rs232_send(stdout_rs232_port, '\r');
-  if(c!='\r') rs232_send (stdout_rs232_port, c);
-#else
-  rs232_send (stdout_rs232_port, c);
+  if(c=='\n')
+    rs232_send(stdout_rs232_port, '\r');
+  if(c!='\r')
 #endif
+  rs232_send (stdout_rs232_port, c);
   return 0;
 }
 /*---------------------------------------------------------------------------*/

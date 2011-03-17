@@ -56,19 +56,21 @@
 
 
 
-#include "contiki.h"
-#include "contiki-lib.h"
-#include "contiki-net.h"
-#include "webserver-nogui.h"
-#include "httpd-cgi.h"
-
-//#include "frame.h"
-#include "mac.h"
-
-#include "raven-lcd.h"
 
 #include <string.h>
 #include <stdio.h>
+
+#include "contiki.h"
+#include "contiki-lib.h"
+#include "contiki-net.h"
+#include "raven-lcd.h"
+
+#if WEBSERVER
+#include "webserver-nogui.h"
+#include "httpd-cgi.h"
+#endif
+
+#include "mac.h"
 
 
 static u8_t count = 0;
@@ -88,15 +90,16 @@ static struct{
 #define UIP_ICMP_BUF            ((struct uip_icmp_hdr *)&uip_buf[uip_l2_l3_hdr_len])
 #define PING6_DATALEN 16
 
-#define CMD_TEMP 0x80
-#define CMD_PING 0x81
-#define CMD_ADC2 0x82
 
 #define SOF_CHAR 1
 #define EOF_CHAR 4
 
 void rs232_send(uint8_t port, unsigned char c);
 
+process_event_t raven_lcd_updated_temp;
+process_event_t raven_lcd_updated_extvoltage;
+process_event_t raven_lcd_updated_batvoltage;
+process_event_t raven_lcd_updated_relay;
 
 /*---------------------------------------------------------------------------*/
 /* Sends a ping packet out the radio */
@@ -179,6 +182,21 @@ send_frame(uint8_t cmd, uint8_t len, uint8_t *payload)
     rs232_send(0, EOF_CHAR);
 }
 
+void
+raven_lcd_display_messagen(const char* msg,size_t len) {
+	send_frame(REPORT_TEXT_MSG, len, msg);
+}
+
+void
+raven_lcd_display_message(const char* msg) {
+	raven_lcd_display_messagen(msg,strlen(msg));
+}
+
+void
+raven_lcd_beep() {
+	send_frame(REPORT_BEEP,0,0);
+}
+
 /*---------------------------------------------------------------------------*/
 static u8_t
 raven_gui_loop(process_event_t ev, process_data_t data)
@@ -207,13 +225,42 @@ raven_gui_loop(process_event_t ev, process_data_t data)
                 raven_ping6();
                 break;
             case CMD_TEMP:
+#if WEBSERVER
                 /* Set temperature string in web server */
                 web_set_temp((char *)cmd.frame);
+#endif
+				process_post(PROCESS_BROADCAST, raven_lcd_updated_temp, (char *)cmd.frame);
                 break;
             case CMD_ADC2:
+#if WEBSERVER
                 /* Set ext voltage string in web server */
                 web_set_voltage((char *)cmd.frame);
+#endif
+				process_post(PROCESS_BROADCAST, raven_lcd_updated_extvoltage, (char *)cmd.frame);
                 break;
+            case CMD_BATTERY_VOLTAGE:
+//#if WEBSERVER
+//                /* Set battery voltage string in web server */
+//                web_set_battery_voltage((char *)cmd.frame);
+//#endif
+				process_post(PROCESS_BROADCAST, raven_lcd_updated_batvoltage, (char *)cmd.frame);
+                break;
+			case CMD_RELAY_ON:
+				{
+					char v[] = "v=1";
+					process_post(PROCESS_BROADCAST, raven_lcd_updated_relay, v);
+				}
+				break;
+			case CMD_RELAY_OFF:
+				{
+					char v[] = "v=0";
+					process_post(PROCESS_BROADCAST, raven_lcd_updated_relay, v);
+				}
+				break;
+			case CMD_STATUS_REQ:
+				send_frame(REPORT_STATUS,0,0);
+				break;
+				
             default:
                 break;
             }
@@ -281,6 +328,13 @@ PROCESS_THREAD(raven_lcd_process, ev, data)
   u8_t error;
 
   PROCESS_BEGIN();
+
+  raven_lcd_updated_temp = process_alloc_event();
+  raven_lcd_updated_extvoltage = process_alloc_event();
+  raven_lcd_updated_batvoltage = process_alloc_event();
+  raven_lcd_updated_relay = process_alloc_event();
+
+  send_frame(REPORT_STATUS,0,NULL);
   
   if((error = icmp6_new(NULL)) == 0) {
     while(1) {

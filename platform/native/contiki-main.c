@@ -47,6 +47,7 @@
 #include "dev/button-sensor.h"
 #include "dev/pir-sensor.h"
 #include "dev/vib-sensor.h"
+PROCESS_NAME(tapdev_process);
 
 PROCINIT(&etimer_process, &tcpip_process);
 
@@ -77,11 +78,23 @@ main(void)
     int n;
     struct timeval tv;
     
+    clock_time_t next_event;
+	
     n = process_run();
+	next_event = etimer_next_expiration_time()-clock_time();
 
-    
-    tv.tv_sec = 0;
-    tv.tv_usec = 1;
+#if DEBUG_SLEEP
+        if(n > 0) {
+      printf("%d events pending\n",n);
+      } else {
+      printf("next event: T-%.03f\n",(double)next_event/(double)CLOCK_SECOND);
+	  }
+#endif
+
+	if(next_event>CLOCK_SECOND*2)
+		next_event = CLOCK_SECOND*2;
+    tv.tv_sec = n?0:next_event/CLOCK_SECOND;
+    tv.tv_usec = n?0:next_event%1000*1000;
 
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);

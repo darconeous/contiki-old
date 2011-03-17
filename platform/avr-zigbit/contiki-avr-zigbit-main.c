@@ -34,6 +34,7 @@
 #include <avr/pgmspace.h>
 #include <avr/fuse.h>
 #include <avr/eeprom.h>
+#include <avr/sleep.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -189,9 +190,26 @@ main(void)
   printf_P(PSTR("System online.\n"));
 
   /* Main scheduler loop */
-  while(1) {
-    process_run();
-  }
+	while(1) {
+		watchdog_periodic();
+		
+		if(process_run()==0) {
+#if AVR_CONF_ALLOW_AUTOSLEEP
+			clock_time_t sleep_period = etimer_next_expiration_time() - clock_time();
+
+			PRINTF("Going to sleep for %lu clock ticks...\n",(unsigned long)sleep_period);
+
+			watchdog_stop();
+			
+			clock_sleep_with_max_duration(sleep_period);
+
+			watchdog_start();
+
+			PRINTF("...Woke from sleep\n");
+#endif
+		}
+	}
 
   return 0;
 }
+

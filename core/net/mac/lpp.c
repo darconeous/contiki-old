@@ -511,7 +511,7 @@ dutycycle(void *ptr)
 	
   PT_BEGIN(&dutycycle_pt);
 
-  while(1) {
+  while(lpp_is_on) {
 
 #if WITH_PENDING_BROADCAST
     {
@@ -967,6 +967,7 @@ on(void)
 {
   lpp_is_on = 1;
   turn_radio_on();
+  restart_dutycycle(random_rand() % OFF_TIME);
   return 1;
 }
 /*---------------------------------------------------------------------------*/
@@ -991,9 +992,9 @@ channel_check_interval(void)
 static void
 init(void)
 {
-  restart_dutycycle(random_rand() % OFF_TIME);
-
   lpp_is_on = 1;
+
+  restart_dutycycle(random_rand() % OFF_TIME);
   
   announcement_register_listen_callback(listen_callback);
 

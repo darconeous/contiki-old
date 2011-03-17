@@ -57,6 +57,10 @@
 #define SEND_TEMP                     (0x80)
 #define SEND_PING                     (0x81)
 #define SEND_ADC2                     (0x82)
+#define SEND_BATTERY_VOLTAGE          (0x83)
+#define SEND_STATUS_REQ               (0x84)
+#define SEND_RELAY_ON                 (0x85)
+#define SEND_RELAY_OFF                (0x86)
 /** \} */
 
 /** \name These are the Radio to GUI binary commands. */
@@ -64,6 +68,10 @@
 #define REPORT_PING                   (0xC0)
 #define REPORT_PING_BEEP              (0xC1)
 #define REPORT_TEXT_MSG               (0xC2)
+#define REPORT_BEEP					(0xC3)
+#define REPORT_STATUS				(0xC4)
+#define REPORT_RELAY_ON				(0xC5)
+#define REPORT_RELAY_OFF			(0xC6)
 /** \} */
 
 

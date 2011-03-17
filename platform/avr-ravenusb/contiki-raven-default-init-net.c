@@ -33,9 +33,6 @@
  * @(#)$$
  */
 #include "contiki-raven.h"
-#if !RF230BB
-#include "zmac.h"
-#endif
 #include "sicslowpan.h"
 #include "sicslow_ethernet.h"
 #include "rndis/rndis_task.h"
@@ -62,8 +59,7 @@ void byte_reverse(uint8_t * bytes, uint8_t num)
 }
 
 void
-init_net(void)
-{
+init_net(void) {
 	extern uint64_t macLongAddr;
 	uint64_t usb_ethernet_addr;
 
@@ -85,10 +81,6 @@ init_net(void)
 	/* Change ieee802.15.4 address to correspond with what the ethernet's
 	 IPv6 address will be. This will have ff:fe in the middle.         */
 	macLongAddr = (macLongAddr & 0xffffff0000ffffffULL) | (0x000000fffe000000ULL);
-
-#if !RF230BB
-	ieee15_4ManagerAddress.set_long_addr(macLongAddr); 
-#endif
 
 	byte_reverse((uint8_t*)&macLongAddr,8);
 	byte_reverse((uint8_t*)&usb_ethernet_addr,6);

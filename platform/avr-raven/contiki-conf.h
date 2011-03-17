@@ -43,6 +43,42 @@
 #ifndef __CONTIKI_CONF_H__
 #define __CONTIKI_CONF_H__
 
+#ifndef UIP_CONF_IPV6_RPL
+#define UIP_CONF_IPV6_RPL 1
+#endif
+
+#ifndef RESOLV_CONF_SUPPORTS_MDNS
+#define RESOLV_CONF_SUPPORTS_MDNS 1
+#endif
+
+#ifndef RESOLV_CONF_MDNS_RESPONDER
+#define RESOLV_CONF_MDNS_RESPONDER RESOLV_CONF_SUPPORTS_MDNS
+#endif
+
+#ifndef UIP_CONF_LOOPBACK_INTERFACE
+#define UIP_CONF_LOOPBACK_INTERFACE	0
+#endif
+
+#ifndef RADIOSTATS
+#define RADIOSTATS 1
+#endif
+
+#ifndef LOG_CONF_ENABLED
+#define LOG_CONF_ENABLED         0
+#endif
+
+#ifndef CONTIKI_CONF_DEFAULT_HOSTNAME
+#define CONTIKI_CONF_DEFAULT_HOSTNAME	"Contiki-Raven"
+#endif
+
+#ifndef CONTIKI_CONF_DEFAULT_DOMAINNAME
+#if RESOLV_CONF_MDNS_RESPONDER
+#define CONTIKI_CONF_DEFAULT_DOMAINNAME	"local"
+#else
+#define CONTIKI_CONF_DEFAULT_DOMAINNAME	"localhost"
+#endif
+#endif
+
 /* MCU and clock rate */
 #define MCU_MHZ 8
 #define PLATFORM PLATFORM_AVR
@@ -63,6 +99,8 @@
 /* Pre-allocated memory for loadable modules heap space (in bytes)*/
 #define MMEM_CONF_SIZE 256
 
+#define RAVEN_CONF_USE_SETTINGS		1
+
 /* Use the following address for code received via the codeprop
  * facility
  */
@@ -75,13 +113,8 @@
 
 #define SICSLOWPAN_CONF_COMPRESSION       SICSLOWPAN_COMPRESSION_HC06
 
-/* RF230BB must be used with low power protocols */
-#if RF230BB
 #define SICSLOWPAN_CONF_CONVENTIONAL_MAC  1     //for barebones driver, sicslowpan calls radio->read function
 #undef PACKETBUF_CONF_HDR_SIZE                  //RF230BB takes the packetbuf default for header size
-#else
-#define PACKETBUF_CONF_HDR_SIZE    0            //RF230 handles headers internally
-#endif /*RF230BB */
 
 #define SICSLOWPAN_CONF_MAX_ADDR_CONTEXTS 2
 
@@ -136,39 +169,42 @@
 #error Network configuration not specified!
 #endif   /* Network setup */
 
-/* Logging adds 200 bytes to program size */
-#define LOG_CONF_ENABLED         1
-
 #define UIP_CONF_LL_802154       1
 #define UIP_CONF_LLH_LEN         0
 
-#define UIP_CONF_MAX_CONNECTIONS 2
-#define UIP_CONF_MAX_LISTENPORTS 2
-#define UIP_CONF_UDP_CONNS       2
+#define UIP_CONF_MAX_CONNECTIONS 3
+#define UIP_CONF_MAX_LISTENPORTS 3
+#define UIP_CONF_UDP_CONNS       3
 
 #define UIP_CONF_IP_FORWARD      0
 #define UIP_CONF_FWCACHE_SIZE    0
 
 #define UIP_CONF_IPV6            1
 #define UIP_CONF_IPV6_CHECKS     1
-#define UIP_CONF_IPV6_QUEUE_PKT  1
+#ifndef UIP_CONF_IPV6_QUEUE_PKT
+#define UIP_CONF_IPV6_QUEUE_PKT  1		// This uses/wastes A LOT of RAM.
+#endif
 #define UIP_CONF_IPV6_REASSEMBLY 0
-#define UIP_CONF_NETIF_MAX_ADDRESSES  3
-#define UIP_CONF_ND6_MAX_PREFIXES     3
-#define UIP_CONF_ND6_MAX_NEIGHBORS    4  
-#define UIP_CONF_ND6_MAX_DEFROUTERS   2
+//#define UIP_CONF_NETIF_MAX_ADDRESSES  3 // Default value
+//#define UIP_CONF_ND6_MAX_PREFIXES     3 // Default value
+//#define UIP_CONF_ND6_MAX_NEIGHBORS    4 // Default value
+//#define UIP_CONF_ND6_MAX_DEFROUTERS   2 // Default value
 #define UIP_CONF_ICMP6           1
 
 #define UIP_CONF_UDP             1
 #define UIP_CONF_UDP_CHECKSUMS   1
 
-#define UIP_CONF_TCP             1
+#ifndef UIP_CONF_TCP
+#define UIP_CONF_TCP             0
+#endif
 #define UIP_CONF_TCP_SPLIT       1
 
-#if 0    /* RPL */
+#ifndef UIP_CONF_ACTIVE_OPEN
+#define UIP_CONF_ACTIVE_OPEN 0
+#endif
 
+#if UIP_CONF_IPV6_RPL
 #define UIP_CONF_ROUTER                 1
-#define UIP_CONF_IPV6_RPL               1
 
 /* Handle 10 neighbors */
 #define UIP_CONF_DS6_NBR_NBU     4
@@ -214,6 +250,8 @@ typedef unsigned short u16_t;
 typedef unsigned long u32_t;
 typedef unsigned short uip_stats_t;
 typedef unsigned long off_t;
+typedef uintptr_t size_t;
+typedef intptr_t ssize_t;
 
 void clock_delay(unsigned int us2);
 void clock_wait(int ms10);

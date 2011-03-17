@@ -82,5 +82,6 @@ void menu_clear_temp(void);
 void menu_prepare_temp(uint8_t *val);
 void menu_stop_temp(void);
 void menu_send_temp(void);
+void menu_send_temp_if_changed(void);
 
 #endif /* MENU_H */

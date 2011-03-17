@@ -355,8 +355,8 @@ uip_ipchksum(void)
 static u16_t
 upper_layer_chksum(u8_t proto)
 {
-  u16_t upper_layer_len;
-  u16_t sum;
+  volatile u16_t upper_layer_len;
+  volatile u16_t sum;
   
   upper_layer_len = (((u16_t)(UIP_IP_BUF->len[0]) << 8) + UIP_IP_BUF->len[1] - uip_ext_len) ;
   
@@ -1119,8 +1119,12 @@ uip_process(u8_t flag)
     }
   }
 #else /* UIP_CONF_ROUTER */
+  // TODO: Add promiscuous mode...?
   if(!uip_ds6_is_my_addr(&UIP_IP_BUF->destipaddr) &&
      !uip_ds6_is_my_maddr(&UIP_IP_BUF->destipaddr) &&
+#if UIP_CONF_LOOPBACK_INTERFACE
+	 !uip_is_addr_loopback(&UIP_IP_BUF->destipaddr) &&
+#endif
      !uip_is_addr_mcast(&UIP_IP_BUF->destipaddr)) {
     PRINTF("Dropping packet, not for me\n");
     UIP_STAT(++uip_stat.ip.drop);
@@ -1284,6 +1288,7 @@ uip_process(u8_t flag)
   if(uip_icmp6chksum() != 0xffff) {
     UIP_STAT(++uip_stat.icmp.drop);
     UIP_STAT(++uip_stat.icmp.chkerr);
+    PRINTF("icmpv6: bad checksum: 0x%04x\n\r",uip_icmp6chksum());
     UIP_LOG("icmpv6: bad checksum.");
     goto drop;
   }
@@ -1367,18 +1372,16 @@ uip_process(u8_t flag)
      UDP/IP headers, but let the UDP application do all the hard
      work. If the application sets uip_slen, it has a packet to
      send. */
-#if UIP_UDP_CHECKSUMS
   uip_len = uip_len - UIP_IPUDPH_LEN;
+#if UIP_UDP_CHECKSUMS
   uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPUDPH_LEN];
-  if(UIP_UDP_BUF->udpchksum != 0 && uip_udpchksum() != 0xffff) {
+  if((UIP_UDP_BUF->udpchksum != 0) && (uip_udpchksum() != 0xffff)) {
     UIP_STAT(++uip_stat.udp.drop);
     UIP_STAT(++uip_stat.udp.chkerr);
     PRINTF("udp: bad checksum 0x%04x 0x%04x\n", UIP_UDP_BUF->udpchksum,
            uip_udpchksum());
     goto drop;
   }
-#else /* UIP_UDP_CHECKSUMS */
-  uip_len = uip_len - UIP_IPUDPH_LEN;
 #endif /* UIP_UDP_CHECKSUMS */
 
   /* Make sure that the UDP destination port number is not zero. */
@@ -1398,6 +1401,13 @@ uip_process(u8_t flag)
        connection is bound to a remote port. Finally, if the
        connection is bound to a remote IP address, the source IP
        address of the packet is checked. */
+#if 0
+    PRINTF("uip_udp_conn = 0x%02x\n",uip_udp_conn);	   
+    PRINTF("\tuip_udp_conn->lport = %d\n",uip_udp_conn->lport);
+    PRINTF("\tUIP_UDP_BUF->destport = %d\n",UIP_UDP_BUF->destport);
+    PRINTF("\tuip_udp_conn->rport = %d\n",uip_udp_conn->rport);
+    PRINTF("\tUIP_UDP_BUF->srcport = %d\n",UIP_UDP_BUF->srcport);
+#endif
     if(uip_udp_conn->lport != 0 &&
        UIP_UDP_BUF->destport == uip_udp_conn->lport &&
        (uip_udp_conn->rport == 0 ||
@@ -1427,11 +1437,10 @@ uip_process(u8_t flag)
   UIP_UDP_APPCALL();
 
  udp_send:
-  PRINTF("In udp_send\n");
-
   if(uip_slen == 0) {
     goto drop;
   }
+  PRINTF("In udp_send\n");
   uip_len = uip_slen + UIP_IPUDPH_LEN;
 
   /* For IPv6, the IP length field does not include the IPv6 IP header
@@ -1476,6 +1485,7 @@ uip_process(u8_t flag)
                                        checksum. */
     UIP_STAT(++uip_stat.tcp.drop);
     UIP_STAT(++uip_stat.tcp.chkerr);
+	PRINTF("tcp: bad checksum: 0x%04x\n",uip_tcpchksum());
     UIP_LOG("tcp: bad checksum.");
     goto drop;
   }

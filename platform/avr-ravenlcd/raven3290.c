@@ -140,13 +140,18 @@
 
 #include <avr/io.h>
 #include <avr/fuse.h>
-FUSES =
-	{
-		.low = 0xe2,
-		.high = 0x99,
-		.extended = 0xff,
-	};
 
+FUSES = {
+#if F_CPU == 8000000UL
+	.low = (FUSE_CKSEL0 & FUSE_CKSEL2 & FUSE_CKSEL3 & FUSE_SUT0),
+#elif F_CPU == 1000000UL
+	.low = LFUSE_DEFAULT,
+#else
+#error Unsupported F_CPU value
+#endif
+	.high = HFUSE_DEFAULT & FUSE_EESAVE,
+	.extended = EFUSE_DEFAULT,
+};
 
 /** \ingroup lcdraven
     \defgroup lcd LCD Functions and data
@@ -173,8 +178,8 @@ const char menu_text15[];
 const tmenu_item menu_items[16];
 #else  /* !DOXYGEN */
 /** \brief This is the menu text in Flash. See menu_items[] for menu operation. */
-const char menu_text0[] PROGMEM =  "CONTIKI";
-const char menu_text1[] PROGMEM =  "6LOWPAN";
+const char menu_text0[] PROGMEM =  "READY";
+const char menu_text1[] PROGMEM =  "LOADING...";
 const char menu_text2[] PROGMEM =  "PING";
 const char menu_text3[] PROGMEM =  "PINGING";
 const char menu_text4[] PROGMEM =  "TEMP";
@@ -202,7 +207,7 @@ const char menu_text15[] PROGMEM = "SENDING";
 */
 const PROGMEM tmenu_item menu_items[16]  = {
     {menu_text0,   0,  2,  0,  0, 0,                       0                  },
-    {menu_text1,   0,  2,  0,  0, 0,                       0                  },
+    {menu_text1,   1,  1,  1,  1, 1,                       0                  },
     {menu_text2,   0,  3, 11,  4, 0,                       menu_ping_request  },
     {menu_text3,   2,  2,  2,  2, 0,                       0                  },
     {menu_text4,   0,  5,  2, 11, 0,                       0                  },
@@ -254,13 +259,24 @@ read_menu(uint8_t ndx)
 void
 check_main_menu(void)
 {
+/*
     if(menu.text == menu_text0){
         read_menu(1);
         lcd_puts_P(menu.text);
     }
-    else if(menu.text == menu_text1){
+	else
+*/
+	if(menu.text == menu_text1){
+		uart_serial_send_frame(SEND_STATUS_REQ,0,0);
+    }
+}
+
+void
+got_status_report(void) {
+	if(menu.text == menu_text1){
         read_menu(0);
         lcd_puts_P(menu.text);
+		menu_send_temp();
     }
 }
 
@@ -314,7 +330,8 @@ main(void)
     lcd_symbol_set(LCD_SYMBOL_IP);
 
     /* Start with main menu */
-    read_menu(0);
+    read_menu(1);
+	
     /* and draw it */
     lcd_puts_P(menu.text);
 
@@ -335,7 +352,7 @@ main(void)
             }
             /* Auto send temp data to 1284p. */
             if(auto_temp){
-                menu_send_temp();
+                menu_send_temp_if_changed();
             }
             /* If ping mode, send 4 ping requests and then stop. */
             if(ping_mode){

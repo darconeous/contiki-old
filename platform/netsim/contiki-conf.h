@@ -132,7 +132,7 @@ typedef unsigned long clock_time_t;
 
 #define UIP_CONF_LOGGING         1
 
-#define UIP_CONF_UDP_CHECKSUMS   0
+#define UIP_CONF_UDP_CHECKSUMS   UIP_CONF_IPV6
 
 #define LOADER_CONF_ARCH "loader/dlloader.h"
 

@@ -6,6 +6,8 @@ all: ravenusbstick
 CONTIKI_NO_NET=1
 #UIP_CONF_IPV6=1
 
+#RPL      = rpl.c rpl-dag.c rpl-icmp6.c rpl-timers.c rpl-of-etx.c uip-ds6.c uip-icmp6.c uip-nd6.c uip6.c neighbor-info.c neighbor-attr.c tcpip.c uip-split.c psock.c
+
 CONTIKI = ../..
 
 include $(CONTIKI)/Makefile.include

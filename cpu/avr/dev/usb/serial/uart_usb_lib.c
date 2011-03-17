@@ -46,7 +46,6 @@
 #include "usb_drv.h"
 #include "usb_descriptors.h"
 #include "serial/uart_usb_lib.h"
-#include "cdc_task.h"
 #include <stdio.h>
 
 /**
@@ -55,6 +54,10 @@
  */
 
 /*_____ M A C R O S ________________________________________________________*/
+
+#ifndef USB_CDC_ACM_HOOK_RX
+#define USB_CDC_ACM_HOOK_RX(char)
+#endif
 
 #ifndef USB_CDC_ACM_HOOK_TX_START
 #define USB_CDC_ACM_HOOK_TX_START(char)
@@ -81,6 +84,7 @@
 Uchar tx_counter;
 Uchar rx_counter;
 S_line_coding   line_coding;
+static uint8_t uart_usb_control_line_state = 0;
 
 /*_____ D E C L A R A T I O N ______________________________________________*/
 
@@ -99,7 +103,7 @@ void uart_usb_configure_endpoints() {
 		TYPE_BULK,     
 		DIRECTION_IN,  
 		SIZE_32,       
-		TWO_BANKS,     
+		TWO_BANKS,
 		NYET_ENABLED
 	);
 
@@ -108,7 +112,7 @@ void uart_usb_configure_endpoints() {
 		TYPE_BULK,     
 		DIRECTION_OUT,  
 		SIZE_32,       
-		TWO_BANKS,     
+		TWO_BANKS,
 		NYET_ENABLED
 	);
 
@@ -122,25 +126,16 @@ void uart_usb_configure_endpoints() {
 
 int usb_stdout_putchar(char c, FILE *stream)
 {
-	// Preserve the currently selected endpoint
-	uint8_t uenum = UENUM;
-	
-	// send to USB port
-	// don't send anything if USB can't accept chars
-	Usb_select_endpoint(VCP_TX_EP);
-
-	if(usb_endpoint_wait_for_write_enabled()!=0)
-		return 0;
-
 	if(c=='\n')
 		uart_usb_putchar('\r');
 
 	if(c!='\r')
 		uart_usb_putchar(c);
 
-	// Restore previously selected endpoint
-	UENUM = uenum;
-
+	// Flush on newline.
+	if(c=='\n')
+		uart_usb_flush();
+		
 	return 0;
 }
 
@@ -155,6 +150,7 @@ void uart_usb_init(void)
 {
   tx_counter = 0;
   rx_counter = 0;
+  uart_usb_control_line_state = 0;
 }
 
 void uart_usb_set_stdout(void)
@@ -162,8 +158,6 @@ void uart_usb_set_stdout(void)
   stdout = &usb_stdout;
 }
 
-
-static uint8_t uart_usb_control_line_state = 0;
 
 uint8_t uart_usb_get_control_line_state(void) {
 	return uart_usb_control_line_state;
@@ -187,11 +181,7 @@ void uart_usb_set_control_line_state(uint8_t control_line_state)
 bit uart_usb_tx_ready(void)
 {
   Usb_select_endpoint(VCP_TX_EP);
-  if (!Is_usb_write_enabled())
-  {
-    return FALSE;
-  }
-  return TRUE;
+  return !!Is_usb_write_enabled();
 }
 
 /**
@@ -212,7 +202,7 @@ int uart_usb_putchar(int data_to_send)
 
 	Usb_select_endpoint(VCP_TX_EP);
 
-	if(!uart_usb_tx_ready()) {
+	if(usb_endpoint_wait_for_write_enabled()!=0) {
 		data_to_send=-1;
 		goto bail;
 	}
@@ -221,8 +211,9 @@ int uart_usb_putchar(int data_to_send)
 	tx_counter++;
 
 	//If Endpoint full -> flush
-	if(!Is_usb_write_enabled())
+	if(!Is_usb_write_enabled()) {
 		uart_usb_flush();
+	}
 
 	USB_CDC_ACM_HOOK_TX_END(data_to_send);
 
@@ -243,15 +234,13 @@ bit uart_usb_test_hit(void)
   if (!rx_counter)
   {
 	// Preserve the currently selected endpoint
-	uint8_t uenum = UENUM;
+	uint8_t uenum = Usb_get_selected_endpoint();
     Usb_select_endpoint(VCP_RX_EP);
     if (Is_usb_receive_out())
     {
       rx_counter = Usb_byte_counter();
       if (!rx_counter)
-		{
         Usb_ack_receive_out();
-		}
     }
 	// Restore previously selected endpoint
 	UENUM = uenum;
@@ -272,7 +261,7 @@ char uart_usb_getchar(void)
   register Uchar data_rx;
 
   // Preserve the currently selected endpoint
-  uint8_t uenum = UENUM;
+  uint8_t uenum = Usb_get_selected_endpoint();
   
   Usb_select_endpoint(VCP_RX_EP);
   if (!rx_counter) while (!uart_usb_test_hit());
@@ -284,6 +273,8 @@ char uart_usb_getchar(void)
   //Local echo
   uart_usb_putchar(data_rx);
 #endif
+
+  USB_CDC_ACM_HOOK_RX(data_rx);
   
   // Restore previously selected endpoint
   UENUM = uenum;
@@ -298,16 +289,19 @@ char uart_usb_getchar(void)
   */
 void uart_usb_flush (void)
 {
-	// Preserve the currently selected endpoint
-	uint8_t uenum = UENUM;
+	if(tx_counter) {
+		// Preserve the currently selected endpoint
+		uint8_t uenum = Usb_get_selected_endpoint();
 	
-	Usb_select_endpoint(VCP_TX_EP);
-	Usb_send_in();
-	tx_counter = 0;
-	usb_endpoint_wait_for_write_enabled();
+		Usb_select_endpoint(VCP_TX_EP);
+		Usb_send_in();
+		tx_counter = 0;
 
-	// Restore previously selected endpoint
-	UENUM = uenum;
+		usb_endpoint_wait_for_IN_ready();
+
+		// Restore previously selected endpoint
+		UENUM = uenum;
+	}
 }
 
 /** @} */

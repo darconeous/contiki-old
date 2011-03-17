@@ -102,9 +102,7 @@ struct timestamp {
 #define FOOTER1_CORRELATION 0x7f
 
 /* Leave radio on for testing low power protocols */
-#if JACKDAW
-#define RADIOALWAYSON 1
-#else
+#ifndef RADIOALWAYSON
 #define RADIOALWAYSON 1
 #endif
 
@@ -117,10 +115,6 @@ struct timestamp {
 #define PRINTSHORT(...) //printf(__VA_ARGS__)
 #endif
 
-/* See clock.c and httpd-cgi.c for RADIOSTATS code */
-#if WEBSERVER
-#define RADIOSTATS 1
-#endif
 #if RADIOSTATS
 uint8_t RF230_rsigsi;
 uint16_t RF230_sendpackets,RF230_receivepackets,RF230_sendfail,RF230_receivefail;
@@ -192,7 +186,7 @@ const struct radio_driver rf230_driver =
     rf230_transmit,
     rf230_send,
     rf230_read,
-    rf230_cca,
+    rf230_cca,		/* Clear-Channel Assessment (CCA) */
     rf230_receiving_packet,
     pending_packet,
     rf230_on,
@@ -736,7 +730,7 @@ rf230_prepare(const void *payload, unsigned short payload_len)
  
   /* Copy payload to RAM buffer */
   total_len = payload_len + AUX_LEN;
-  if (total_len > RF230_MAX_TX_FRAME_LENGTH){
+  if (total_len > RF230_MAX_TX_FRAME_LENGTH) {
 #if RADIOSTATS
     RF230_sendfail++;
 #endif
@@ -941,9 +935,6 @@ if (RF230_receive_on) {
 
   pending = 1;
   
-#if RADIOSTATS
-  RF230_receivepackets++;
-#endif
   rf230_packets_seen++;
 
 #if RADIOALWAYSON
@@ -1023,9 +1014,8 @@ rf230_read(void *buf, unsigned short bufsize)
 if (RF230_receive_on) {
 #endif
 
-// PRINTSHORT("r%d",rxframe.length);  
   PRINTF("rf230_read: %u bytes lqi %u crc %u\n",rxframe.length,rxframe.lqi,rxframe.crc);
-#if DEBUG>1
+#if DEBUG
     for (len=0;len<rxframe.length;len++) PRINTF(" %x",rxframe.data[len]);PRINTF("\n");
 #endif
 
@@ -1038,16 +1028,16 @@ if (RF230_receive_on) {
   }
   rf230_time_of_departure = 0;
 #endif /* RF230_CONF_TIMESTAMPS */
-// GET_LOCK();
   rf230_packets_read++;
 
-//if(len > RF230_MAX_PACKET_LEN) {
   if(len > RF230_MAX_TX_FRAME_LENGTH) {
     /* Oops, we must be out of sync. */
     DEBUGFLOW('y');
     flushrx();
     RIMESTATS_ADD(badsynch);
-//    RELEASE_LOCK();
+#if RADIOSTATS
+    RF230_receivefail++;
+#endif
     return 0;
   }
 
@@ -1056,7 +1046,9 @@ if (RF230_receive_on) {
     PRINTF("len <= AUX_LEN\n");
     flushrx();
     RIMESTATS_ADD(tooshort);
- //   RELEASE_LOCK();
+#if RADIOSTATS
+    RF230_receivefail++;
+#endif
     return 0;
   }
 
@@ -1065,7 +1057,9 @@ if (RF230_receive_on) {
     PRINTF("len - AUX_LEN > bufsize\n");
     flushrx();
     RIMESTATS_ADD(toolong);
-//    RELEASE_LOCK();
+#if RADIOSTATS
+    RF230_receivefail++;
+#endif
     return 0;
   }
  /* Transfer the frame, stripping the footer */
@@ -1091,14 +1085,18 @@ if (RF230_receive_on) {
     DEBUGFLOW('K');
     PRINTF("checksum failed 0x%04x != 0x%04x\n",
       checksum, crc16_data(buf, len - AUX_LEN, 0));
+#if RADIOSTATS
+    RF230_receivefail++;
+#endif
   }
 
   if(footer[1] & FOOTER1_CRC_OK &&
-     checksum == crc16_data(buf, len - AUX_LEN, 0)) {
+     checksum == crc16_data(buf, len - AUX_LEN, 0))
 #else
-  if (1) {
+  if (1)
  // if(footer[1] & FOOTER1_CRC_OK) {
 #endif /* RF230_CONF_CHECKSUM */
+	{
 //  rf230_last_rssi = footer[0];
     rf230_last_rssi = hal_subregister_read(SR_RSSI);
 //  rf230_last_correlation = footer[1] & FOOTER1_CORRELATION;
@@ -1124,26 +1122,32 @@ if (RF230_receive_on) {
     PRINTF("bad crc");
     RIMESTATS_ADD(badcrc);
     len = AUX_LEN;
+#if RADIOSTATS
+    RF230_receivefail++;
+#endif
   }
-
-  /* Clean up in case of FIFO overflow!  This happens for every full
-   * length frame and is signaled by FIFOP = 1 and FIFO = 0.
-   */
- // if(FIFOP_IS_1 && !FIFO_IS_1) {
-    /*    printf("rf230_read: FIFOP_IS_1 1\n");*/
- //   flushrx();
- // } else if(FIFOP_IS_1) {
-    /* Another packet has been received and needs attention. */
-    /*    printf("attention\n");*/
- //   process_poll(&rf230_process);
-//  }
-
- // RELEASE_LOCK();
 
 #ifdef RF230BB_HOOK_RX_PACKET
   RF230BB_HOOK_RX_PACKET(buf,len);
 #endif
 
+#if 0	// Not sure what this was for or why it was turned off, but it looks like it might be useful.
+  /* Clean up in case of FIFO overflow!  This happens for every full
+  * length frame and is signaled by FIFOP = 1 and FIFO = 0.
+  */
+  if(FIFOP_IS_1 && !FIFO_IS_1) {
+    PRINTF("rf230_read: FIFOP_IS_1 1\n");
+    flushrx();
+  } else if(FIFOP_IS_1) {
+    /* Another packet has been received and needs attention. */
+    PRINTF("attention\n");
+	pending = 1;
+    process_poll(&rf230_process);
+  }
+#endif
+#if RADIOSTATS
+  RF230_receivepackets++;
+#endif
 
   return len - AUX_LEN;
 
@@ -1195,6 +1199,7 @@ rf230_get_raw_rssi(void)
   return rssi;
 }
 /*---------------------------------------------------------------------------*/
+/* Clear-Channel Assessment (CCA) */
 static int
 rf230_cca(void)
 {
@@ -1213,6 +1218,9 @@ rf230_cca(void)
     radio_was_off = 1;
     rf230_on();
   }
+
+  // For some reason we are always returning 1 here. Perhaps because
+  // the CCA stuff is handled by the radio itself...?
 
  // cca = CCA_IS_1;
   DEBUGFLOW('c');

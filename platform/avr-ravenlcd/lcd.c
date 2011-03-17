@@ -294,6 +294,8 @@ lcd_init(void)
     lcd_config.drive      = LCD_DRIVE_450;
     lcd_config.contrast   = LCD_CONTRAST_3_30;
 
+	lcd_config.drive = LCD_DRIVE_HALF;
+
     /* Enable module */
     PRR &= ~(1 << PRLCD);
 
@@ -450,15 +452,7 @@ lcd_num_clr(void)
 int
 lcd_puts(const char* s)
 {
-    strcpy((char*)lcd_text, s);
-    lcd_text_wr_ptr = strlen(s);
-    lcd_text_rd_ptr = 0;
-
-    lcd_text_put((char*)&lcd_text[lcd_text_rd_ptr], 1);
-
-    lcd_scroll_enable = (lcd_text_wr_ptr > 7) ? true : false;
-
-    return 0;
+	return lcd_puta(strlen(s),s);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -474,11 +468,14 @@ lcd_puts(const char* s)
 int
 lcd_puta(size_t length, const uint8_t *s)
 {
+	if(length>sizeof(lcd_text))
+		length = sizeof(lcd_text);
+	memset((void*)lcd_text,0,sizeof(lcd_text));
     memcpy((void*)lcd_text, (void const*)s, length);
     lcd_text_wr_ptr = length;
     lcd_text_rd_ptr = 0;
 
-    lcd_text_put((char*)&lcd_text[lcd_text_rd_ptr], 1);
+	lcd_text_put((char*)&lcd_text[lcd_text_rd_ptr], 1);
 
     lcd_scroll_enable = (lcd_text_wr_ptr > 7) ? true : false;
 
@@ -497,7 +494,8 @@ lcd_puta(size_t length, const uint8_t *s)
 int
 lcd_puts_P(const char *s)
 {
-    strcpy_P((char*)lcd_text, s);
+	memset((void*)lcd_text,0,sizeof(lcd_text));
+    strncpy_P((char*)lcd_text, s,sizeof(lcd_text));
     lcd_text_wr_ptr = strlen_P(s);
     lcd_text_rd_ptr = 0;
 

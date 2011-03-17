@@ -491,6 +491,7 @@ radio_get_rssi_value(uint8_t *rssi)
 
     /*The RSSI measurement should only be done in RX_ON or BUSY_RX.*/
     if ((current_state == RX_ON) ||
+		(current_state == RX_AACK_ON) ||
         (current_state == BUSY_RX)){
         *rssi = hal_subregister_read(SR_RSSI);
         retval = RADIO_SUCCESS;

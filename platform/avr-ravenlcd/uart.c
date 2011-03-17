@@ -44,7 +44,7 @@
 #include "main.h"
 #include "menu.h"
 #include "beep.h"
-
+#include <util/delay.h>
 /**
  *  \addtogroup lcd
  *  \{
@@ -426,21 +426,36 @@ uart_serial_rcv_frame(uint8_t wait_for_ack)
 
             timeout_flag = false;
 
-            /* Beep on successful ping response. */
+        case REPORT_BEEP:
             lcd_symbol_set(LCD_SYMBOL_BELL);
             beep();
             lcd_symbol_clr(LCD_SYMBOL_BELL);
             break;
+
         case REPORT_PING_BEEP:
+            /* Beep on successful ping response. */
             lcd_symbol_set(LCD_SYMBOL_BELL);
-            beep();
+            _delay_ms(100);
+			//beep();
             lcd_symbol_clr(LCD_SYMBOL_BELL);
             break;
         case REPORT_TEXT_MSG:
             /* Get text message, print to lcd. */
-            lcd_puts((char *)payload);
-            beep();
+            lcd_puta(length,(char *)payload);
+            //beep();
             break;
+		case REPORT_STATUS:
+			got_status_report();
+            beep();
+			break;
+		case REPORT_RELAY_ON:
+			lcd_puts("RELAY ON");
+            beep();
+			break;
+		case REPORT_RELAY_OFF:
+			lcd_puts("RELAY OFF");
+            beep();
+			break;
         default:
             break;
     }

@@ -32,7 +32,10 @@
  */
 #define ANNOUNCE_BOOT 1    //adds about 600 bytes to program size
 
-#define DEBUG 0
+#ifndef DEBUG
+#define DEBUG 1
+#endif
+
 #if DEBUG
 #define PRINTF(FORMAT,args...) printf_P(PSTR(FORMAT),##args)
 #define PRINTSHORT(FORMAT,args...) printf_P(PSTR(FORMAT),##args)
@@ -45,6 +48,7 @@
 #include <avr/pgmspace.h>
 #include <avr/fuse.h>
 #include <avr/eeprom.h>
+#include <avr/sleep.h>
 #include <stdio.h>
 #include <string.h>
 #include <dev/watchdog.h>
@@ -74,6 +78,8 @@
 #include "dev/serial-line.h"
 #include "dev/slip.h"
 
+#include "watchdog.h"
+
 #ifdef RAVEN_LCD_INTERFACE
 #include "raven-lcd.h"
 #endif
@@ -93,19 +99,34 @@
 #include "net/rime/rime-udp.h"
 #endif
 
+#if RAVEN_CONF_USE_SETTINGS
+#include "settings.h"
+#endif
+
 #include "net/rime.h"
 
 /*-------------------------------------------------------------------------*/
 /*----------------------Configuration of the .elf file---------------------*/
 typedef struct {unsigned char B2;unsigned char B1;unsigned char B0;} __signature_t;
 #define SIGNATURE __signature_t __signature __attribute__((section (".signature")))
-SIGNATURE = {
-/* Older AVR-GCCs may not define the SIGNATURE_n bytes so use explicit 1284p values */
-  .B2 = 0x05,//SIGNATURE_2,
-  .B1 = 0x97,//SIGNATURE_1,
-  .B0 = 0x1E,//SIGNATURE_0,
+
+#ifdef SIGNATURE_0
+SIGNATURE = { .B2  = SIGNATURE_2, .B1 = SIGNATURE_1, .B0 = SIGNATURE_0, };
+#else /* Older AVR-GCCs may not define the SIGNATURE_n bytes so use explicit values */
+SIGNATURE = { .B2 = 0x05, .B1 = 0x97, .B0 = 0x1E, };
+#endif
+
+FUSES = {
+#if F_CPU == 8000000UL
+	.low = (FUSE_CKSEL0 & FUSE_CKSEL2 & FUSE_CKSEL3 & FUSE_SUT0 & FUSE_SUT1),
+#elif F_CPU == 1000000UL
+	.low = LFUSE_DEFAULT,
+#else
+#error Unsupported F_CPU value
+#endif
+	.high = HFUSE_DEFAULT & FUSE_EESAVE,
+	.extended = EFUSE_DEFAULT,
 };
-FUSES ={.low = 0xe2, .high = 0x99, .extended = 0xff,};
 
 /* Put default MAC address in EEPROM */
 #if WEBSERVER
@@ -115,6 +136,7 @@ extern uint8_t domain_name[30];
 #else
 uint8_t mac_address[8] EEMEM = {0x02, 0x11, 0x22, 0xff, 0xfe, 0x33, 0x44, 0x55};
 #endif
+
 
 
 static uint8_t get_channel_from_eeprom() {
@@ -129,19 +151,55 @@ static uint8_t get_channel_from_eeprom() {
 	return 26;
 }
 
-static bool get_mac_from_eeprom(uint8_t* macptr) {
+static bool
+get_mac_from_eeprom(uint8_t macptr[8]) {
+#if RAVEN_CONF_USE_SETTINGS
+	size_t size = 8;
+
+	if(settings_get(SETTINGS_KEY_EUI64, 0, (unsigned char*)macptr, &size)!=SETTINGS_STATUS_OK)
+		eeprom_read_block ((void *)macptr,  0 /*&mac_address*/, 8);
+#else
 	eeprom_read_block ((void *)macptr,  &mac_address, 8);
+#endif
+
+bail:
+	if(macptr[0]&1)
+	{
+		// no mac address in eeprom. Make one up.
+		macptr[0]=0x02;
+		macptr[1]=0x00;
+		macptr[2]=0x00;
+		macptr[3]=0x00;
+		macptr[4]=0x00;
+		macptr[5]=0x00;
+		macptr[6]=0x00;
+		macptr[7]=0x03;
+		//settings_set(SETTINGS_KEY_EUI64, (unsigned char*)macptr, 8);
+	}
 	return true;
 }
 
-static uint16_t get_panid_from_eeprom(void) {
+static uint16_t
+get_panid_from_eeprom(void) {
+#if RAVEN_CONF_USE_SETTINGS
+	uint16_t x = settings_get_uint16(SETTINGS_KEY_PAN_ID, 0);
+	if(!x)
+		x = IEEE802154_PANID;
+	return x;
+#else
 	// TODO: Writeme!
 	return IEEE802154_PANID;
+#endif
 }
 
-static uint16_t get_panaddr_from_eeprom(void) {
+static uint16_t
+get_panaddr_from_eeprom(void) {
+#if RAVEN_CONF_USE_SETTINGS
+	return settings_get_uint16(SETTINGS_KEY_PAN_ADDR, 0);
+#else
 	// TODO: Writeme!
 	return 0;
+#endif
 }
 
 
@@ -238,9 +296,6 @@ void initialize(void)
   process_start(&raven_lcd_process, NULL);
 #endif
 
-  /* Autostart other processes */
-  autostart_start(autostart_processes);
-
   //Give ourselves a prefix
   // init_net();
 
@@ -271,22 +326,40 @@ void initialize(void)
 }
 #endif
 
-/*--------------------------Announce the configuration---------------------*/
-#if ANNOUNCE_BOOT
+   char buf[80] = {};
+
+   //settings_set(SETTINGS_KEY_HOSTNAME, "raven1", sizeof("raven1")-1);
 
 #if WEBSERVER
-  uint8_t i;
-  char buf[80];
-  unsigned int size;
+   // The webserver has the server name in eeprom, supodidly.
+   eeprom_read_block (buf,server_name, sizeof(server_name));
+   buf[sizeof(server_name)]=0;
+#endif
 
+#if RAVEN_CONF_USE_SETTINGS
+   settings_get_cstr(SETTINGS_KEY_HOSTNAME, 0, buf, sizeof(buf));
+#endif
+   
+#if RESOLV_CONF_MDNS_RESPONDER
+   if(buf[0])
+      resolv_set_hostname(buf);
+#endif
+
+
+/*--------------------------Announce the configuration---------------------*/
+
+#if ANNOUNCE_BOOT && WEBSERVER
+  unsigned int size;
+  uint8_t i;
   for (i=0;i<UIP_DS6_ADDR_NB;i++) {
 	if (uip_ds6_if.addr_list[i].isused) {	  
+       char buf[80];
 	   httpd_cgi_sprint_ip6(uip_ds6_if.addr_list[i].ipaddr,buf);
        printf_P(PSTR("IPv6 Address: %s\n"),buf);
 	}
   }
-   eeprom_read_block (buf,server_name, sizeof(server_name));
-   buf[sizeof(server_name)]=0;
+
+#if ANNOUNCE_BOOT
    printf_P(PSTR("%s"),buf);
    eeprom_read_block (buf,domain_name, sizeof(domain_name));
    buf[sizeof(domain_name)]=0;
@@ -305,9 +378,11 @@ void initialize(void)
 
 #else
    printf_P(PSTR("Online\n"));
-#endif /* WEBSERVER */
-
 #endif /* ANNOUNCE_BOOT */
+
+#endif /* ANNOUNCE_BOOT && WEBSERVER */
+
+
 }
 
 /*---------------------------------------------------------------------------*/
@@ -335,62 +410,30 @@ extern char rf230_interrupt_flag, rf230processflag;
 int
 main(void)
 {
-  initialize();
+	initialize();
 
-  while(1) {
-    process_run();
-//Various entry points for debugging in AVR simulator
-//    NETSTACK_RADIO.send(packetbuf_hdrptr(), 42);
-//    process_poll(&rf230_process);
-//    packetbuf_clear();
-//    len = rf230_read(packetbuf_dataptr(), PACKETBUF_SIZE);
-//    packetbuf_set_datalen(42);
-//    NETSTACK_RDC.input();
-    watchdog_periodic();
-#if TESTRTIMER
-    if (rtimerflag) {  //8 seconds is maximum interval, my raven 6% slow
-      rtimer_set(&rt, RTIMER_NOW()+ RTIMER_ARCH_SECOND*1UL, 1,(void *) rtimercycle, NULL);
-      rtimerflag=0;
-#if STAMPS
-      if ((rtime%STAMPS)==0) {
-        printf("%us ",rtime);
-      }
-#endif
-      rtime+=1;
-#if PINGS
-      if ((rtime%PINGS)==0) {
-        PRINTF("**Ping\n");
-        raven_ping6();
-      }
-#endif
-    }
-#endif
+	/* Autostart other processes */
+	autostart_start(autostart_processes);
 
-//Use with RF230BB DEBUGFLOW to show path through driver
-#if RF230BB&&0
-extern uint8_t debugflowsize,debugflow[];
-  if (debugflowsize) {
-    debugflow[debugflowsize]=0;
-    printf("%s",debugflow);
-    debugflowsize=0;
-   }
-#endif
+	while(1) {
+		watchdog_periodic();
+		
+		if(process_run()==0) {
+#if AVR_CONF_ALLOW_AUTOSLEEP
+			clock_time_t sleep_period = etimer_next_expiration_time() - clock_time();
 
-#if RF230BB&&0
-    if (rf230processflag) {
-      printf("rf230p%d",rf230processflag);
-      rf230processflag=0;
-    }
-#endif
+			PRINTF("Going to sleep for %lu clock ticks...\n",(unsigned long)sleep_period);
 
-#if RF230BB&&0
-    if (rf230_interrupt_flag) {
- //   if (rf230_interrupt_flag!=11) {
-        PRINTSHORT("**RI%u",rf230_interrupt_flag);
- //   }
-      rf230_interrupt_flag=0;
-    }
+			watchdog_stop();
+			
+			clock_sleep_with_max_duration(sleep_period);
+
+			watchdog_start();
+
+			PRINTF("...Woke from sleep\n");
 #endif
-  }
-  return 0;
+		}
+	}
+	return 0;
 }
+

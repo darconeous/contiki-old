@@ -54,15 +54,17 @@ init_lowlevel(void)
     Leds_init();
     Leds_off();
 
-        if (checkForFinger()) {
+	if (checkForFinger()) {
+		if(bootloader_is_present())
+			Jump_To_Bootloader();
 			if(bootloader_is_present())
 				Jump_To_Bootloader();
 #ifdef WINXPSP2
-				usb_mode = mass_storage;
+		usb_mode = mass_storage;
 #else
-                fingerPresent = 1;
+		fingerPresent = 1;
 #endif
-        }
+	}
 
  return;
 
