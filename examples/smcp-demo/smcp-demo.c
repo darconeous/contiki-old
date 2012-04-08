@@ -124,12 +124,14 @@ action_msg_func(smcp_variable_node_t node,  char* content, size_t content_length
 smcp_status_t
 elapsed_time_get_func(smcp_variable_node_t node, char* content, size_t* content_length, coap_content_type_t* content_type) {
 	int ret = 0;
-	
-	snprintf(content,*content_length,"v=%lu",clock_seconds());
-	*content_length = strlen(content);
-	*content_type = SMCP_CONTENT_TYPE_APPLICATION_FORM_URLENCODED;
 
-	PRINTF("Uptime queried.\n");
+	if(content_type)
+		*content_type = SMCP_CONTENT_TYPE_APPLICATION_FORM_URLENCODED;
+	if(content) {
+		snprintf(content,*content_length,"v=%lu",clock_seconds());
+		*content_length = strlen(content);
+		PRINTF("Uptime queried.\n");
+	}
 
 	return ret;
 }
@@ -146,21 +148,24 @@ create_elapsed_time_variable_node(smcp_variable_node_t ret,smcp_node_t parent,co
 smcp_status_t
 string_value_get_func(smcp_variable_node_t node, char* content, size_t* content_length, coap_content_type_t* content_type) {
 	int ret = 0;
-	
-	if(*content_length<3) {
-		ret = SMCP_STATUS_FAILURE;
-		*content_length = 0;
-		goto bail;
-	}
-	
-	content[0] = 'v';
-	content[1] = '=';
-	url_encode_cstr(content+2,(const char*)node->node.context,*content_length-2);
-		
-	*content_length = strlen(content);
-	*content_type = SMCP_CONTENT_TYPE_APPLICATION_FORM_URLENCODED;
 
-	PRINTF("string_value_get_func queried.\n");
+	if(content_type)
+		*content_type = SMCP_CONTENT_TYPE_APPLICATION_FORM_URLENCODED;
+	if(content && content_length) {
+		if(*content_length<3) {
+			ret = SMCP_STATUS_FAILURE;
+			*content_length = 0;
+			goto bail;
+		}
+		
+		content[0] = 'v';
+		content[1] = '=';
+		url_encode_cstr(content+2,(const char*)node->node.context,*content_length-2);
+
+		*content_length = strlen(content);
+
+		PRINTF("string_value_get_func queried.\n");
+	}
 	
 
 bail:
@@ -170,6 +175,12 @@ bail:
 smcp_status_t
 processes_value_get_func(smcp_variable_node_t node, char* content, size_t* content_length, coap_content_type_t* content_type) {
 	int ret = 0;
+
+	if(content_type)
+		*content_type = COAP_CONTENT_TYPE_TEXT_CSV;
+
+	if(!content || !content_length)
+		goto bail;
 	
 	if(*content_length<3) {
 		ret = SMCP_STATUS_FAILURE;
@@ -186,7 +197,6 @@ processes_value_get_func(smcp_variable_node_t node, char* content, size_t* conte
 	}
 	
 	*content_length = size;
-	*content_type = COAP_CONTENT_TYPE_TEXT_CSV;
 
 bail:
 	return ret;
@@ -196,7 +206,13 @@ smcp_status_t
 etimer_list_get_func(smcp_variable_node_t node, char* content, size_t* content_length, coap_content_type_t* content_type) {
 	int ret = 0;
 	extern struct etimer *timerlist;
-	
+
+	if(content_type)
+		*content_type = COAP_CONTENT_TYPE_TEXT_CSV;
+
+	if(!content || !content_length)
+		goto bail;
+
 	if(*content_length<3) {
 		ret = SMCP_STATUS_FAILURE;
 		*content_length = 0;
@@ -212,7 +228,6 @@ etimer_list_get_func(smcp_variable_node_t node, char* content, size_t* content_l
 	}
 	
 	*content_length = size;
-	*content_type = COAP_CONTENT_TYPE_TEXT_CSV;
 
 bail:
 	return ret;
@@ -222,7 +237,13 @@ bail:
 smcp_status_t
 sensor_list_get_func(smcp_variable_node_t node, char* content, size_t* content_length, coap_content_type_t* content_type) {
 	int ret = 0;
+
+	if(content_type)
+		*content_type = COAP_CONTENT_TYPE_TEXT_CSV;
 	
+	if(!content || !content_length)
+		goto bail;
+
 	if(*content_length<3) {
 		ret = SMCP_STATUS_FAILURE;
 		*content_length = 0;
@@ -412,7 +433,7 @@ PROCESS_THREAD(smcp_demo, ev, data)
 			
 			PRINTF("Temp event (%s)\n",(const char*)content);
 
-			smcp_daemon_trigger_event(
+			smcp_daemon_trigger_custom_event(
 				smcp_daemon,
 				"temp",
 				content,
@@ -437,7 +458,7 @@ PROCESS_THREAD(smcp_demo, ev, data)
 
 			PRINTF("Bat Voltage event (%s)\n",(const char*)content);
 			
-			smcp_daemon_trigger_event(
+			smcp_daemon_trigger_custom_event(
 				smcp_daemon,
 				"batvoltage",
 				content,

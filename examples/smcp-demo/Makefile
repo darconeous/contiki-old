@@ -10,10 +10,11 @@ CFLAGS += -ISMCP/src
 CONTIKI_SOURCEFILES += $(SMCP_SOURCEFILES)
 APPDIRS += SMCP/src/smcp
 CLEAN += *.hex *.elf symbols.c symbols.h
-MCU = m1284p
-APPS += raven-webserver
+
+#MCU = m1284p
+#APPS += raven-webserver
 #APPS += webserver
-APPS += raven-lcd-interface
+#APPS += raven-lcd-interface
 
 #CFLAGS += -g -O0
 
