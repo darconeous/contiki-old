@@ -106,6 +106,10 @@ endif
 LDFLAGS  += -mmcu=$(MCU) -Wl,-Map=contiki-$(TARGET).map \
            -Wl,--section-start=.bootloader=$(BOOTLOADER_START)
 
+# The following two lines strip out unused functions and symbols, making the executable smaller.
+CFLAGS += -ffunction-sections -fdata-sections
+LDFLAGS += -Wl,--gc-sections
+
 ### Setup directory search path for source files
 
 CONTIKI_TARGET_DIRS_CONCAT = ${addprefix $(CONTIKI)/platform/$(TARGET)/, \
@@ -149,6 +153,12 @@ endif
 
 #%.hex: %.elf
 #	$(OBJCOPY) -R .eeprom -R .fuse -R .signature $^ -O ihex $@
+
+#%-eeprom.hex: %.elf
+#	$(OBJCOPY) -j .eeprom $^ -O ihex $@
+
+#%-fuse.hex: %.elf
+#	$(OBJCOPY) -j .fuse $^ -O ihex $@
 
 %.eep: %.out
 	-$(OBJCOPY) -j .eeprom --set-section-flags=.eeprom="alloc,load" \
