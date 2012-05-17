@@ -30,6 +30,7 @@ CONTIKI_TARGET_SOURCEFILES +=   cfs-eeprom.c eeprom.c random.c \
 								httpd-simple-avr.c \
                                 contiki-raven-main.c \
                                 queuebuf.c packetbuf.c rng.c \
+								status_leds.c \
                 $(RPL) \
                 $(USB)
 

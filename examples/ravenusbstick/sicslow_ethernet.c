@@ -231,6 +231,7 @@
 #include "sicslow_ethernet.h"
 #include "rndis/rndis_protocol.h"
 #include "rndis/rndis_task.h"
+#include "status_leds.h"
 
 #include <stdint.h>
 #include <stdio.h>

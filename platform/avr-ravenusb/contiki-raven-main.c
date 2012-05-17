@@ -64,6 +64,8 @@
 #include "contiki-lib.h"
 #include "contiki-raven.h"
 
+#include "status_leds.h"
+
 /* Set ANNOUNCE to send boot messages to USB or RS232 serial port */
 #define ANNOUNCE 1
 
@@ -443,6 +445,8 @@ uint16_t p=(uint16_t)&__bss_end;
 #endif
 #endif
 	
+	Leds_init();
+
   /* rtimer init needed for low power protocols */
   rtimer_init();
 
@@ -451,8 +455,6 @@ uint16_t p=(uint16_t)&__bss_end;
 
   /* etimer process must be started before USB or ctimer init */
   process_start(&etimer_process, NULL);
-
-  Led2_on();
   /* Now we can start USB enumeration */
   process_start(&usb_process, NULL);
 
@@ -560,6 +562,8 @@ uint16_t p=(uint16_t)&__bss_end;
 #if USB_CONF_STORAGE
   process_start(&storage_process, NULL);
 #endif
+
+  process_start(&status_leds_process, NULL);
 
   /* Autostart other processes */
   /* There are none in the default build so autostart_processes will be unresolved in the link. */
