@@ -31,27 +31,8 @@
  */
 
 /*---------------------------------------------------------------------------*/
-//#include "mac_event.h"
-//#include "uip.h"
-#include <avr/pgmspace.h>
-#include <stdio.h>
 #include "contiki.h"
+#include <stdio.h>
+#include "cdc_task.h"
 
-/* Template for autostarting processes.
- * The AUTOSTART_PROCESS macro is enabled by the compiler switch -DAUTOSTART_ENABLE
- * which is applied only to the .co file (this one).
- */
-#if 0
-
-PROCESS(hello_process, "Hello process");
-AUTOSTART_PROCESSES(&hello_process);
-
-PROCESS_THREAD(hello_process, ev, data)
-{
-  PROCESS_BEGIN();
-
-  printf_P(PSTR("Hello!\n"));
-  
-  PROCESS_END();
-}
-#endif
+AUTOSTART_PROCESSES(&cdc_process);
