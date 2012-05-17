@@ -41,6 +41,22 @@
 #define __RESOLV_H__
 
 #include "contiki.h"
+#include "uip.h"
+
+#ifndef RESOLV_SUPPORTS_LOOKUP2_API
+#define RESOLV_SUPPORTS_LOOKUP2_API  1
+#endif
+
+// If RESOLV_CONF_SUPPORTS_MDNS is set, then queries
+// for domain names in the local TLD will use mDNS as
+// described by draft-cheshire-dnsext-multicastdns.
+#ifndef RESOLV_CONF_SUPPORTS_MDNS
+#define RESOLV_CONF_SUPPORTS_MDNS (1)
+#endif
+
+#ifndef RESOLV_CONF_MDNS_RESPONDER
+#define RESOLV_CONF_MDNS_RESPONDER RESOLV_CONF_SUPPORTS_MDNS
+#endif
 
 /**
  * Event that is broadcasted when a DNS name has been resolved.
@@ -51,7 +67,27 @@ CCIF extern process_event_t resolv_event_found;
 CCIF void resolv_conf(const uip_ipaddr_t *dnsserver);
 CCIF uip_ipaddr_t *resolv_getserver(void);
 CCIF uip_ipaddr_t *resolv_lookup(const char *name);
+
+#if RESOLV_SUPPORTS_LOOKUP2_API
+enum {
+    RESOLV_STATUS_CACHED = 0,
+    RESOLV_STATUS_UNCACHED,
+    RESOLV_STATUS_EXPIRED,
+    RESOLV_STATUS_NOT_FOUND,
+    RESOLV_STATUS_RESOLVING,
+    RESOLV_STATUS_ERROR,
+};
+typedef uint8_t resolv_status_t;
+
+CCIF resolv_status_t resolv_lookup2(const char *name,uip_ipaddr_t **ipaddr);
+#endif
+
 CCIF void resolv_query(const char *name);
+
+#if RESOLV_CONF_MDNS_RESPONDER
+CCIF void resolv_set_hostname(const char* hostname);
+CCIF const char* resolv_get_hostname(void);
+#endif
 
 PROCESS_NAME(resolv_process);
 
