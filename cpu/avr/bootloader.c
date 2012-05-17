@@ -5,6 +5,9 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include "dev/usb/usb_drv.h"
+#include <avr/pgmspace.h>
+#include <avr/interrupt.h>
+#include <avr/eeprom.h>
 
 //Not all AVR toolchains alias MCUSR to the older MSUSCR name
 //#if defined (__AVR_ATmega8__) || defined (__AVR_ATmega8515__) || defined (__AVR_ATmega16__)
@@ -14,6 +17,8 @@
 #endif
 
 volatile uint32_t Boot_Key ATTR_NO_INIT;
+
+#define EEPROM_MAGIC_BYTE   (uint8_t*)(E2END-3)
 
 bool
 bootloader_is_present(void) {
@@ -28,26 +33,32 @@ bootloader_is_present(void) {
 void
 Jump_To_Bootloader(void)
 {
-	uint8_t i;
-	
-#ifdef UDCON
-	// If USB is used, detach from the bus
-	Usb_detach();
-#endif
-
 	// Disable all interrupts
 	cli();
 
-	// Set the bootloader key to the magic value and force a reset
-	Boot_Key = MAGIC_BOOT_KEY;
+#ifdef UDCON
+	// If USB is used, detach from the bus
+	Usb_detach();
 
 	// Wait two seconds for the USB detachment to register on the host
-	for (i = 0; i < 128; i++)
-		_delay_ms(16);
+	uint8_t i;
+	for (i = 0; i < 20; i++) {
+		_delay_ms(100);
+		watchdog_periodic();
+	}
+#endif
 
 	// Set the bootloader key to the magic value and force a reset
 	Boot_Key = MAGIC_BOOT_KEY;
-	
+
+    // Disable all interrupts
+    cli();
+
+    eeprom_write_byte(EEPROM_MAGIC_BYTE,0xFF);
+
+    // Enable interrupts
+    sei();
+
 	watchdog_reboot();
 }
 
@@ -62,10 +73,26 @@ Bootloader_Jump_Check(void)
 		if(Boot_Key == MAGIC_BOOT_KEY) {
 			Boot_Key = 0;
 			wdt_disable();
+
+            // Disable all interrupts
+            cli();
+
+            eeprom_write_byte(EEPROM_MAGIC_BYTE,0xFF);
+
+            // Enable interrupts
+            sei();
 			
-			((void (*)(void))BOOTLOADER_START_ADDRESS)();
+			((void (*)(void))(BOOTLOADER_START_ADDRESS))();
 		} else {
+			// The watchdog fired. Probably means we
+			// crashed. Wait two seconds before continuing.
+
 			Boot_Key++;
+			uint8_t i;
+			for (i = 0; i < 200; i++) {
+				_delay_ms(10);
+				watchdog_periodic();
+			}
 		}
 	} else {
 		Boot_Key = MAGIC_BOOT_KEY-4;
