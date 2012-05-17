@@ -33,6 +33,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <signal.h>
 #include <time.h>
 #include <sys/select.h>
 #include <unistd.h>
@@ -95,7 +97,7 @@ PROCESS_THREAD(border_router_process, ev, data)
 #else
       {
 	static void sprint_ip6(uip_ip6addr_t addr);
-	int i;
+    int i,c=0;
 	uip_ip6addr_t ipaddr;
 #ifdef HARD_CODED_ADDRESS
 	uiplib_ipaddrconv(HARD_CODED_ADDRESS, &ipaddr);
@@ -111,8 +113,11 @@ PROCESS_THREAD(border_router_process, ev, data)
 	    printf("IPV6 Address: ");
 	    sprint_ip6(uip_ds6_if.addr_list[i].ipaddr);
 	    printf("\n");
+        c++;
 	  }
 	}
+    if(c==0)
+        printf("ERROR: *** NO IPv6 INTERFACES AVAILABLE *** \n");
       }
 #endif
     }
@@ -267,13 +272,16 @@ main(void)
        (ipaddr.u16[2] != 0) ||
        (ipaddr.u16[3] != 0)) {
 #if UIP_CONF_ROUTER
-      uip_ds6_prefix_add(&ipaddr, UIP_DEFAULT_PREFIX_LEN, 0, 0, 0, 0);
+      if(!uip_ds6_prefix_add(&ipaddr, UIP_DEFAULT_PREFIX_LEN, 0, 0, 0, 0))
+        abort();
 #else /* UIP_CONF_ROUTER */
-      uip_ds6_prefix_add(&ipaddr, UIP_DEFAULT_PREFIX_LEN, 0);
+      if(!uip_ds6_prefix_add(&ipaddr, UIP_DEFAULT_PREFIX_LEN, 0))
+        abort();
 #endif /* UIP_CONF_ROUTER */
 
       uip_ds6_set_addr_iid(&ipaddr, &uip_lladdr);
-      uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF);
+      if(!uip_ds6_addr_add(&ipaddr, 0, ADDR_AUTOCONF))
+        abort();
     }
   }
 #endif /* !UIP_CONF_IPV6_RPL */
@@ -290,14 +298,17 @@ main(void)
 
 #if UIP_CONF_IPV6 && !RPL_BORDER_ROUTER  /* Border router process prints addresses later */
   {
-    uint8_t i;
+    int i=0,c=0;
     for(i = 0; i < UIP_DS6_ADDR_NB; i++) {
       if(uip_ds6_if.addr_list[i].isused) {
-	printf("IPV6 Addresss: ");
-	sprint_ip6(uip_ds6_if.addr_list[i].ipaddr);
-	printf("\n");
+        printf("IPV6 Addresss: ");
+        sprint_ip6(uip_ds6_if.addr_list[i].ipaddr);
+        printf("\n");
+        c++;
       }
     }
+    if(c==0)
+      printf("ERROR: *** NO IPv6 INTERFACES AVAILABLE *** \n");
   }
 #endif
 
@@ -305,14 +316,37 @@ main(void)
     fd_set fds;
     int n;
     struct timeval tv;
+    clock_time_t next_event;
     
     n = process_run();
+    next_event = etimer_next_expiration_time()-clock_time();
 
-    tv.tv_sec = 0;
-    tv.tv_usec = 1000;
+#if DEBUG_SLEEP
+    if(n > 0)
+      printf("%d events pending\n",n);
+    else
+      printf("next event: T-%.03f\n",(double)next_event/(double)CLOCK_SECOND);
+#endif
+
+#ifdef __CYGWIN__
+    /* wpcap doesn't appear to support select, so
+     * we can't idle the process on windows. */
+    next_event = 0;
+#endif
+
+    if(next_event>CLOCK_SECOND*2)
+      next_event = CLOCK_SECOND*2;
+    tv.tv_sec = n?0:next_event/CLOCK_SECOND;
+    tv.tv_usec = n?0:next_event%1000*1000;
+
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
+#ifdef __CYGWIN__
     select(1, &fds, NULL, NULL, &tv);
+#else
+    FD_SET(tapdev_fd(), &fds);
+    select(tapdev_fd()+1, &fds, NULL, NULL, &tv);
+#endif
 
     if(FD_ISSET(STDIN_FILENO, &fds)) {
       char c;
@@ -320,6 +354,7 @@ main(void)
 	serial_line_input_byte(c);
       }
     }
+    process_poll(&tapdev_process);
     etimer_request_poll();
   }
   
@@ -338,6 +373,14 @@ uip_log(char *m)
   printf("uIP: '%s'\n", m);
 }
 /*---------------------------------------------------------------------------*/
+void
+_xassert(const char *file, int line)
+{
+  printf("%s:%u: failed assertion\n",file,line);
+  abort();
+}
+
+
 unsigned short
 sensors_light1(void)
 {
