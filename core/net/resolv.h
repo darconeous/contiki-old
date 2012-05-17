@@ -52,6 +52,19 @@ CCIF extern process_event_t resolv_event_found;
 CCIF void resolv_conf(const uip_ipaddr_t *dnsserver);
 CCIF uip_ipaddr_t *resolv_getserver(void);
 CCIF uip_ipaddr_t *resolv_lookup(const char *name);
+
+enum {
+	RESOLV_STATUS_CACHED = 0,
+	RESOLV_STATUS_UNCACHED,
+	RESOLV_STATUS_EXPIRED,
+	RESOLV_STATUS_NOT_FOUND,
+	RESOLV_STATUS_RESOLVING,
+	RESOLV_STATUS_ERROR,
+};
+typedef uint8_t resolv_status_t;
+
+CCIF resolv_status_t resolv_lookup2(const char *name,uip_ipaddr_t **ipaddr);
+
 CCIF void resolv_query(const char *name);
 
 #if RESOLV_CONF_MDNS_RESPONDER

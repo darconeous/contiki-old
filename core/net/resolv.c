@@ -857,6 +857,7 @@ resolv_query(const char *name)
   // Force check_entires() to run on our process.
   process_post(&resolv_process, PROCESS_EVENT_TIMER, 0);
 }
+
 /*-----------------------------------------------------------------------------------*/
 /**
  * Look up a hostname in the array of known hostnames.
@@ -871,9 +872,10 @@ resolv_query(const char *name)
  * hostnames.
  */
 /*-----------------------------------------------------------------------------------*/
-uip_ipaddr_t *
-resolv_lookup(const char *name)
-{
+
+resolv_status_t
+resolv_lookup2(const char *name,uip_ipaddr_t **ipaddr) {
+  resolv_status_t ret = RESOLV_STATUS_UNCACHED;
   static u8_t i;
   struct namemap *nameptr;
 
@@ -904,30 +906,62 @@ resolv_lookup(const char *name)
 		.u8 = { 127, 0, 0, 1 }
 	};
 #endif
-	return &loopback;
+	if(ipaddr)
+		*ipaddr = &loopback;
+	ret = RESOLV_STATUS_CACHED;
   }
 #endif
 
-  /* Walk through the list to see if the name is in there. If it is
-     not, we return NULL. */
-  for(i = 0; i < RESOLV_ENTRIES; ++i) {
-    nameptr = &names[i];
-    if(nameptr->state == STATE_DONE
-		&& (strcmp(name, nameptr->name) == 0)
-	) {
+	/* Walk through the list to see if the name is in there. If it is
+	not, we return NULL. */
+	for(i = 0; i < RESOLV_ENTRIES; ++i) {
+		nameptr = &names[i];
+		if(strcmp(name, nameptr->name) == 0) {
+			switch(nameptr->state) {
+				case STATE_DONE:
+					ret = RESOLV_STATUS_CACHED;
+					break;
+				case STATE_ASKING:
+					ret = RESOLV_STATUS_RESOLVING;
+					break;
+				case STATE_ERROR:
+					ret = RESOLV_STATUS_NOT_FOUND;
+					break;
+			}
+			if(ipaddr)
+				*ipaddr = &nameptr->ipaddr;
+			break;
+		}
+	}
+
+bail:
+
 #if VERBOSE_DEBUG
-	printf("resolver: Found \"%s\" in cache.\n",name);
-	uip_ipaddr_t *addr=&nameptr->ipaddr;
-	
-	printf("resolver: %02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x \n", ((u8_t *)addr)[0], ((u8_t *)addr)[1], ((u8_t *)addr)[2], ((u8_t *)addr)[3], ((u8_t *)addr)[4], ((u8_t *)addr)[5], ((u8_t *)addr)[6], ((u8_t *)addr)[7], ((u8_t *)addr)[8], ((u8_t *)addr)[9], ((u8_t *)addr)[10], ((u8_t *)addr)[11], ((u8_t *)addr)[12], ((u8_t *)addr)[13], ((u8_t *)addr)[14], ((u8_t *)addr)[15]);
+	switch(ret) {
+		case RESOLV_STATUS_CACHED: {
+			printf("resolver: Found \"%s\" in cache.\n",name);
+			uip_ipaddr_t *addr=*addr;
+
+			printf("resolver: %02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x:%02x%02x \n", ((u8_t *)addr)[0], ((u8_t *)addr)[1], ((u8_t *)addr)[2], ((u8_t *)addr)[3], ((u8_t *)addr)[4], ((u8_t *)addr)[5], ((u8_t *)addr)[6], ((u8_t *)addr)[7], ((u8_t *)addr)[8], ((u8_t *)addr)[9], ((u8_t *)addr)[10], ((u8_t *)addr)[11], ((u8_t *)addr)[12], ((u8_t *)addr)[13], ((u8_t *)addr)[14], ((u8_t *)addr)[15]);
+			break;
+		}
+		default:
+			printf("resolver: \"%s\" is NOT cached.\n",name);
+			break'
+
+	}
 #endif
-      return &nameptr->ipaddr;
-    }
-  }
-#if VERBOSE_DEBUG
-	printf("resolver: \"%s\" is NOT cached.\n",name);
-#endif
-  return NULL;
+
+	return ret;
+}
+
+
+uip_ipaddr_t *
+resolv_lookup(const char *name)
+{
+	uip_ipaddr_t *ret = NULL;
+	resolv_lookup2(name,&ret);
+	return ret;
 }
 /*-----------------------------------------------------------------------------------*/
 /**
