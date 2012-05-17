@@ -57,6 +57,17 @@
 #define DEVTAP "/dev/tap0"
 #endif /* linux */
 
+#ifdef __APPLE__
+#include <net/if.h>
+#include <netinet/in.h>
+#include <netinet6/in6_var.h>
+#include <netinet6/nd6.h> // ND6_INFINITE_LIFETIME
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/errno.h>
+#include <net/if_dl.h> // struct sockaddr_dl
+#include <net/route.h> // AF_ROUTE things
+#endif
 
 #include "tapdev6.h"
 #include "contiki-net.h"
@@ -67,7 +78,7 @@
 static int drop = 0;
 #endif
 
-static int fd;
+static int fd,reqfd,sfd,interface_index;
 
 static unsigned long lasttime;
 
@@ -145,6 +156,91 @@ tapdev_init(void)
     }
   }
 #endif /* Linux */
+
+#if defined(__APPLE__)
+    struct stat st;
+    fstat(fd,&st);
+    {  // Add address
+        struct in6_aliasreq addreq6 = {};
+        reqfd = socket(AF_INET6,SOCK_DGRAM,0);
+
+        if(-1 == fcntl(reqfd,F_SETFD,FD_CLOEXEC)) {
+            printf("Call to fcntl(reqfd,F_SETFD,FD_CLOEXEC) failed, errno=%d (%s)\n",errno,strerror(errno));
+        }
+
+        devname_r(st.st_rdev, S_IFCHR, addreq6.ifra_name, sizeof(addreq6.ifra_name));
+        //printf("Interface name: %s\n",addreq6.ifra_name);
+
+        addreq6.ifra_addr.sin6_family = AF_INET6;
+        addreq6.ifra_addr.sin6_len = sizeof(addreq6.ifra_addr);
+        addreq6.ifra_addr.sin6_addr.__u6_addr.__u6_addr16[0]=UIP_HTONS(0xAAAA);
+        addreq6.ifra_addr.sin6_addr.__u6_addr.__u6_addr16[7]=UIP_HTONS(0x0001);
+
+        addreq6.ifra_prefixmask.sin6_family = AF_INET6;
+        addreq6.ifra_prefixmask.sin6_len = sizeof(addreq6.ifra_prefixmask);
+        addreq6.ifra_prefixmask.sin6_addr.__u6_addr.__u6_addr16[0]=UIP_HTONS(0xFFFF);
+        addreq6.ifra_prefixmask.sin6_addr.__u6_addr.__u6_addr16[1]=UIP_HTONS(0xFFFF);
+        addreq6.ifra_prefixmask.sin6_addr.__u6_addr.__u6_addr16[2]=UIP_HTONS(0xFFFF);
+        addreq6.ifra_prefixmask.sin6_addr.__u6_addr.__u6_addr16[3]=UIP_HTONS(0xFFFF);
+
+        addreq6.ifra_lifetime.ia6t_vltime = ND6_INFINITE_LIFETIME;
+        addreq6.ifra_lifetime.ia6t_pltime = ND6_INFINITE_LIFETIME;
+        addreq6.ifra_lifetime.ia6t_expire = ND6_INFINITE_LIFETIME;
+        addreq6.ifra_lifetime.ia6t_preferred = ND6_INFINITE_LIFETIME;
+        //addreq6.ifra_flags |= IN6_IFF_AUTOCONF;
+
+        if(-1 == ioctl (reqfd, SIOCAIFADDR_IN6, &addreq6)) {
+            printf("Unable to set interface address, errno=%d (%s)\n",errno,strerror(errno));
+        }
+    }
+    {  // Add route
+        int s = socket (AF_ROUTE, SOCK_RAW, AF_INET6);
+        sfd = s;
+        interface_index = if_nametoindex(devname(st.st_rdev, S_IFCHR));
+        if(s == -1) {
+            printf("Unable to create AF_ROUTE socket, errno=%d (%s)\n",errno,strerror(errno));
+        }
+
+        printf("if_nametoindex(devname(st.st_rdev, S_IFCHR)) = %d\n",interface_index);
+        printf("devname(st.st_rdev, S_IFCHR) = %s\n",devname(st.st_rdev, S_IFCHR));
+
+        struct
+        {
+            struct rt_msghdr hdr;
+            struct sockaddr_in6 dst;
+            struct sockaddr_dl gw;
+            struct sockaddr_in6 mask;
+        } msg = {};
+
+        msg.hdr.rtm_msglen = sizeof (msg);
+        msg.hdr.rtm_version = RTM_VERSION;
+        msg.hdr.rtm_type = RTM_ADD;
+        msg.hdr.rtm_index = interface_index;
+        msg.hdr.rtm_flags = RTF_UP | RTF_STATIC;
+        msg.hdr.rtm_addrs = RTA_DST | RTA_GATEWAY | RTA_NETMASK;
+        msg.hdr.rtm_pid = getpid ();
+        msg.hdr.rtm_seq = 0;
+
+        msg.dst.sin6_family = AF_INET6;
+        msg.dst.sin6_len = sizeof (msg.dst);
+        msg.dst.sin6_addr.__u6_addr.__u6_addr16[0]=UIP_HTONS(0xAAAA);
+
+        msg.gw.sdl_family = AF_LINK;
+        msg.gw.sdl_len = sizeof (msg.gw);
+        msg.gw.sdl_index = interface_index;
+
+        msg.mask.sin6_family = AF_INET6;
+        msg.mask.sin6_len = sizeof(msg.mask);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[0]=UIP_HTONS(0xFFFF);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[1]=UIP_HTONS(0xFFFF);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[2]=UIP_HTONS(0xFFFF);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[3]=UIP_HTONS(0xFFFF);
+        if(-1==write(s,&msg,sizeof(msg))) {
+            printf("Unable to add route, errno=%d (%s)\n",errno,strerror(errno));
+        }
+
+    }
+#endif // defined(__DARWIN__)
 
   /* Linux (ubuntu)
      snprintf(buf, sizeof(buf), "ip link set tap0 up");
@@ -236,5 +332,53 @@ tapdev_do_send(void)
 void
 tapdev_exit(void)
 {
+#ifdef __APPLE__
+    // Only tested on MacOS X so far...
+
+    PRINTF("Closing tapdev...\n");
+
+// Clean up routes
+    {  // Add route
+        struct
+        {
+            struct rt_msghdr hdr;
+            struct sockaddr_in6 dst;
+            struct sockaddr_dl gw;
+            struct sockaddr_in6 mask;
+        } msg = {};
+
+        msg.hdr.rtm_msglen = sizeof (msg);
+        msg.hdr.rtm_version = RTM_VERSION;
+        msg.hdr.rtm_type = RTM_DELETE;
+        msg.hdr.rtm_index = interface_index;
+        msg.hdr.rtm_flags = RTF_UP | RTF_STATIC;
+        msg.hdr.rtm_addrs = RTA_DST | RTA_GATEWAY | RTA_NETMASK;
+        msg.hdr.rtm_pid = getpid ();
+        msg.hdr.rtm_seq = 0;
+
+        msg.dst.sin6_family = AF_INET6;
+        msg.dst.sin6_len = sizeof (msg.dst);
+        msg.dst.sin6_addr.__u6_addr.__u6_addr16[0]=UIP_HTONS(0xAAAA);
+
+        msg.gw.sdl_family = AF_LINK;
+        msg.gw.sdl_len = sizeof (msg.gw);
+        msg.gw.sdl_index = interface_index;
+
+        msg.mask.sin6_family = AF_INET6;
+        msg.mask.sin6_len = sizeof(msg.mask);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[0]=UIP_HTONS(0xFFFF);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[1]=UIP_HTONS(0xFFFF);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[2]=UIP_HTONS(0xFFFF);
+        msg.mask.sin6_addr.__u6_addr.__u6_addr16[3]=UIP_HTONS(0xFFFF);
+        if(-1==write(sfd,&msg,sizeof(msg))) {
+            printf("Unable to delete route, errno=%d (%s)\n",errno,strerror(errno));
+        }
+
+    }
+#endif
+
+    close(fd);
+    close(reqfd);
+    close(sfd);
 }
 /*---------------------------------------------------------------------------*/
