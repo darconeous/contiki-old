@@ -373,13 +373,21 @@ uint8_t i;
        PRINTA("IPv6 Address: %s\n",buf);
 	}
   }
-   cli();
-   eeprom_read_block (buf1,eemem_server_name, sizeof(eemem_server_name));
-   eeprom_read_block (buf,eemem_domain_name, sizeof(eemem_domain_name));
-   sei();
-   buf1[sizeof(eemem_server_name)]=0;
-   PRINTA("%s",buf1);
-   buf[sizeof(eemem_domain_name)]=0;
+   eeprom_read_block (buf,server_name, sizeof(server_name));
+   buf[sizeof(server_name)]=0;
+
+#if RAVEN_CONF_USE_SETTINGS
+    settings_get_cstr(SETTINGS_KEY_HOSTNAME, 0, buf, sizeof(buf));
+#endif
+
+#if RESOLV_CONF_MDNS_RESPONDER
+    if(buf[0])
+        resolv_set_hostname(buf);
+#endif
+
+    PRINTF("%s",buf);
+   eeprom_read_block (buf,domain_name, sizeof(domain_name));
+   buf[sizeof(domain_name)]=0;
    size=httpd_fs_get_size();
 #ifndef COFFEE_FILES
    PRINTA(".%s online with fixed %u byte web content\n",buf,size);
@@ -430,6 +438,9 @@ int
 main(void)
 {
   initialize();
+
+  /* Autostart other processes */
+  autostart_start(autostart_processes);
 
   while(1) {
     watchdog_periodic();

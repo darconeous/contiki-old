@@ -66,10 +66,18 @@ typedef struct {
 
 #define UIP_ETHTYPE_802154 0x809A
 
+//! Location of TRANSLATE (TR) bit in Ethernet address
+#define TRANSLATE_BIT_MASK (1<<2)
+//! Location of LOCAL (GL) bit in Ethernet address
+#define LOCAL_BIT_MASK     (1<<1)
+//! Location of MULTICAST (MU) bit in Ethernet address
+#define MULTICAST_BIT_MASK (1<<0)
 
 extern usbstick_mode_t usbstick_mode; // TODO: Rename!
 extern uint64_t macLongAddr;
 
+extern uint8_t mac_createSicslowpanLongAddr(uint8_t * ethernet, uip_lladdr_t * lowpan);
+extern uint8_t mac_createEthernetAddr(uint8_t * ethernet, uip_lladdr_t * lowpan);
 
 int8_t mac_translateIcmpLinkLayer(lltype_t target);
 int8_t mac_translateIPLinkLayer(lltype_t target);

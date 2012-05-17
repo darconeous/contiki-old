@@ -62,6 +62,14 @@
 #include "dev/watchdog.h"
 #include "rng.h"
 
+#if UIP_CONF_IPV6_RPL
+#include "net/uip-ds6.h"
+#include "rpl.h"
+extern uip_ds6_nbr_t uip_ds6_nbr_cache[];
+extern uip_ds6_route_t uip_ds6_routing_table[];
+extern uip_ds6_netif_t uip_ds6_if;
+#endif
+
 #include "bootloader.h"
 
 #include <avr/pgmspace.h>
@@ -108,6 +116,8 @@ static uint8_t previous_uart_usb_control_line_state = 0;
 static uint8_t timer = 0;
 static struct etimer et;
 
+PROCESS(cdc_process, "Debug Menu");
+
 #define CONVERTTXPOWER 1
 #if CONVERTTXPOWER  //adds ~120 bytes to program flash size
 const char txonesdigit[16]   PROGMEM = {'3','2','2','1','1','0','0','1','2','3','4','5','7','9','2','7'};
@@ -123,8 +133,6 @@ static void printtxpower(void) {
 }
 #endif
 
-PROCESS(cdc_process, "CDC serial process");
-
 /**
  * \brief Communication Data Class (CDC) Process
  *
@@ -135,12 +143,13 @@ PROCESS_THREAD(cdc_process, ev, data_proc)
 {
 	PROCESS_BEGIN();
 
-#if USB_CONF_RS232
-	static FILE *rs232_stdout,*usb_stdout;
-	rs232_stdout=stdout;
-#endif
-
 	while(1) {
+		if(usb_mode == mass_storage) {
+			etimer_set(&et, CLOCK_SECOND);
+			PROCESS_WAIT_EVENT_UNTIL(etimer_expired(&et));
+			continue;
+		}
+
  		if(Is_device_enumerated()) {
 			// If the configuration is different than the last time we checked...
 			if((uart_usb_get_control_line_state()&1)!=previous_uart_usb_control_line_state) {
@@ -149,15 +158,14 @@ PROCESS_THREAD(cdc_process, ev, data_proc)
 				
 				if(previous_uart_usb_control_line_state&1) {
 					previous_stdout = stdout;
-					uart_usb_init();
 					uart_usb_set_stdout();
-				//	menu_print(); do this later
+                    // At this point the user has opened
+                    // the USB debug port. Send them a
+                    // menu so that they can know what to do.
+					menu_print();
 				} else {
 					stdout = previous_stdout;
 				}
-#if USB_CONF_RS232
-				usb_stdout=stdout;
-#endif
 			}
 
 			//Flush buffer if timeout
@@ -168,19 +176,9 @@ PROCESS_THREAD(cdc_process, ev, data_proc)
 				timer++;
 			}
 
-#if USB_CONF_RS232
-			stdout=usb_stdout;
-#endif
 			while (uart_usb_test_hit()){
   		  	   menu_process(uart_usb_getchar());   // See what they want
             }
-#if USB_CONF_RS232
-            if (usbstick_mode.debugOn) {
-			  stdout=rs232_stdout;
-			} else {
-			  stdout=NULL;
-			}
-#endif
 		}//if (Is_device_enumerated())
 
 
@@ -509,6 +507,17 @@ void menu_process(char c)
 				
 				break;
 
+#if JACKDAW_CONF_USE_SETTINGS
+			case '$':
+				settings_debug_dump(stdout);
+				break;
+			case '*':
+				PRINTF_P(PSTR("Wiping all settings. . .\n\r"));
+				settings_wipe();
+				PRINTF_P(PSTR("Done.\n\r"));
+				break;
+#endif // #if JACKDAW_CONF_USE_SETTINGS
+
 			case 'r':
 				if (usbstick_mode.raw) {
 					PRINTF_P(PSTR("Jackdaw does not capture raw frames\n\r"));
@@ -537,6 +546,26 @@ void menu_process(char c)
 				channel_string_i = 0;
 				break;
 
+#if JACKDAW_CONF_USE_CONFIGURABLE_RDC
+extern void jackdaw_choose_rdc_driver(uint8_t i);
+			case '1':
+				jackdaw_choose_rdc_driver(0);
+				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
+				break;
+			case '2':
+				jackdaw_choose_rdc_driver(1);
+				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
+				break;
+			case '3':
+				jackdaw_choose_rdc_driver(2);
+				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
+				break;
+			case '4':
+				jackdaw_choose_rdc_driver(3);
+				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
+				break;
+#endif
+
 			case 'p':
 #if RF230BB
 				PRINTF_P(PSTR("\nSelect transmit power (0=+3dBm 15=-17.2dBm) [%d]: "), rf230_get_txpower());
@@ -549,10 +578,6 @@ void menu_process(char c)
 
 
 #if UIP_CONF_IPV6_RPL
-#include "rpl.h"
-extern uip_ds6_nbr_t uip_ds6_nbr_cache[];
-extern uip_ds6_route_t uip_ds6_routing_table[];
-extern uip_ds6_netif_t uip_ds6_if;
 			case 'N':
 			{	uint8_t i,j;
 				PRINTF_P(PSTR("\n\rAddresses [%u max]\n\r"),UIP_DS6_ADDR_NB);
@@ -619,14 +644,9 @@ extern uip_ds6_netif_t uip_ds6_if;
 				PRINTF_P(PSTR("decompress 6lowpan headers\n\r  * Will "));
 				if (usbstick_mode.raw == 0) { PRINTF_P(PSTR("not "));}
 
-#if USB_CONF_RS232
 				PRINTF_P(PSTR("Output raw 802.15.4 frames\n\r  * Will "));
 				if (usbstick_mode.debugOn == 0) { PRINTF_P(PSTR("not "));}
 				PRINTF_P(PSTR("Output RS232 debug strings\n\r"));
-#else
-				PRINTF_P(PSTR("Output raw 802.15.4 frames\n\r"));
-#endif
-
 				PRINTF_P(PSTR("  * USB Ethernet MAC: %02x:%02x:%02x:%02x:%02x:%02x\n"),
 					((uint8_t *)&usb_ethernet_addr)[0],
 					((uint8_t *)&usb_ethernet_addr)[1],
@@ -664,6 +684,22 @@ extern uip_ds6_netif_t uip_ds6_if;
 					PRINTF_P(PSTR("  * Current/Last/Smallest RSSI: %d/%d/--dBm\n\r"), -91+(rf230_rssi()-1), -91+(rf230_last_rssi-1));
 				}
 
+				PRINTF_P(PSTR("  * RDC Driver: %s\n\r"), NETSTACK_CONF_RDC.name);
+
+#if SICSLOW_ETHERNET_CONF_UPDATE_USB_ETH_STATS
+				PRINTF_P(PSTR("  * usb_eth_stat.txok: %lu\n"), (unsigned long)usb_eth_stat.txok);
+				PRINTF_P(PSTR("  * usb_eth_stat.rxok: %lu\n"), (unsigned long)usb_eth_stat.rxok);
+				PRINTF_P(PSTR("  * usb_eth_stat.txbad: %lu\n"), (unsigned long)usb_eth_stat.txbad);
+				PRINTF_P(PSTR("  * usb_eth_stat.rxbad: %lu\n"), (unsigned long)usb_eth_stat.rxbad);
+#endif
+
+#if RADIOSTATS
+				extern uint16_t RF230_sendpackets,RF230_receivepackets,RF230_sendfail,RF230_receivefail;
+				PRINTF_P(PSTR("  * RF230_sendpackets: %u\n"), (uint16_t)RF230_sendpackets);
+				PRINTF_P(PSTR("  * RF230_receivepackets: %u\n"), (uint16_t)RF230_receivepackets);
+				PRINTF_P(PSTR("  * RF230_sendfail: %u\n"), (uint16_t)RF230_sendfail);
+				PRINTF_P(PSTR("  * RF230_receivefail: %u\n"), (uint16_t)RF230_receivefail);
+#endif
 
 				PRINTF_P(PSTR("  * Configuration: %d, USB<->ETH is "), usb_configuration_nb);
 				if (usb_eth_is_active == 0) PRINTF_P(PSTR("not "));
@@ -745,6 +781,8 @@ uint16_t p=(uint16_t)&__bss_end;
 					PRINTF_P(PSTR("Entering DFU Mode...\n\r"));
 					uart_usb_flush();
 					Leds_on();
+					_delay_ms(100);
+					Usb_detach();
 					for(i = 0; i < 10; i++)_delay_ms(100);
 					Leds_off();
 					Jump_To_Bootloader();
@@ -761,7 +799,14 @@ uint16_t p=(uint16_t)&__bss_end;
 					watchdog_reboot();
 				}
 				break;
-				
+
+			case 'W':
+				{
+					PRINTF_P(PSTR("Switching to windows mode...\n\r"));
+					uart_usb_flush();
+					usb_eth_switch_to_windows_mode();
+				}
+				break;
 #if USB_CONF_STORAGE
 			case 'u':
 
@@ -770,21 +815,36 @@ uint16_t p=(uint16_t)&__bss_end;
 
 				//No more serial port
 				stdout = NULL;
-#if USB_CONF_RS232
-//				usb_stdout = NULL;
-#endif
-
-				//RNDIS is over
-				rndis_state = 	rndis_uninitialized;
-				Leds_off();
 
 				//Deatch USB
 				Usb_detach();
 
+				//RNDIS is over
+				rndis_state = 	rndis_uninitialized;
+
+				// Reset the USB configuration
+				usb_configuration_nb = 0;
+
+				Leds_off();
+
 				//Wait a few seconds
-				for(i = 0; i < 50; i++)
-                    watchdog_periodic();
+				for(i = 0; i < 5; i++) {
+					Led0_on();
 					_delay_ms(100);
+					Led0_off();
+					Led1_on();
+					_delay_ms(100);
+					Led1_off();
+					Led2_on();
+					_delay_ms(100);
+					Led2_off();
+					Led3_on();
+					_delay_ms(100);
+					Led3_off();
+					watchdog_periodic();
+				}
+
+				Leds_off();
 
 				//Attach USB
 				Usb_attach();

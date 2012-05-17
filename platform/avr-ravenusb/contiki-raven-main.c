@@ -51,6 +51,7 @@
 #include <avr/fuse.h>
 #include <avr/eeprom.h>
 #include <avr/wdt.h>
+#include <avr/sleep.h>
 #include <util/delay.h>
 #include <stdio.h>
 #include <string.h>
@@ -63,6 +64,9 @@
 #include "contiki-net.h"
 #include "contiki-lib.h"
 #include "contiki-raven.h"
+#include "rndis/rndis_task.h"
+
+#include "sicslow_ethernet.h"
 
 #include "status_leds.h"
 
@@ -96,19 +100,10 @@
 #include "settings.h"
 #endif
 
-#if RF230BB           //radio driver using contiki core mac
 #include "radio/rf230bb/rf230bb.h"
 #include "net/mac/frame802154.h"
 #define UIP_IP_BUF ((struct uip_ip_hdr *)&uip_buf[UIP_LLH_LEN])
-rimeaddr_t macLongAddr;
-#define	tmp_addr	macLongAddr
-#else                 //legacy radio driver using Atmel/Cisco 802.15.4'ish MAC
-#include <stdbool.h>
-#include "mac.h"
-#include "sicslowmac.h"
-#include "sicslowpan.h"
-#include "ieee-15-4-manager.h"
-#endif /* RF230BB */
+//rimeaddr_t macLongAddr;
 
 /* Test rtimers, also useful for pings, time stamps, routes, stack monitor */
 #define TESTRTIMER 0
@@ -122,6 +117,31 @@ uint16_t rtime;
 struct rtimer rt;
 void rtimercycle(void) {rtimerflag=1;}
 #endif /* TESTRTIMER */
+
+
+#if JACKDAW_CONF_USE_CONFIGURABLE_RDC
+// EXPERIMENTAL.
+#include "net/mac/sicslowmac.h"
+#include "net/mac/contikimac.h"
+#include "net/mac/cxmac.h"
+#include "net/mac/lpp.h"
+// Selected via SETTINGS_KEY_RDC_INDEX
+const struct rdc_driver *rdc_config_choices[] = {
+	&sicslowmac_driver,
+	&contikimac_driver,
+	&cxmac_driver,
+};
+#define MAX_RDC_CONFIG_CHOICES		(sizeof(rdc_config_choices)/sizeof(*rdc_config_choices))
+const struct rdc_driver *rdc_config_driver = &sicslowmac_driver;
+void jackdaw_choose_rdc_driver(uint8_t i) {
+	if(i<MAX_RDC_CONFIG_CHOICES) {
+		rdc_config_driver->off(1);
+		rdc_config_driver = rdc_config_choices[i];
+		rdc_config_driver->init();
+	}
+}
+#endif // #if JACKDAW_CONF_USE_CONFIGURABLE_RDC
+
 
 #if UIP_CONF_IPV6_RPL
 /*---------------------------------------------------------------------------*/
@@ -213,13 +233,23 @@ PROCESS_THREAD(border_router_process, ev, data)
 typedef struct {const unsigned char B2;const unsigned char B1;const unsigned char B0;} __signature_t;
 #define SIGNATURE __signature_t __signature __attribute__((section (".signature")))
 SIGNATURE = {
-  .B2 = 0x82,//SIGNATURE_2, //AT90USB128x
-  .B1 = 0x97,//SIGNATURE_1, //128KB flash
-  .B0 = 0x1E,//SIGNATURE_0, //Atmel
+    .B2 = 0x82,//SIGNATURE_2, //AT90USB128x
+    .B1 = 0x97,//SIGNATURE_1, //128KB flash
+    .B0 = 0x1E,//SIGNATURE_0, //Atmel
 };
 #endif
 
-FUSES ={.low = 0xde, .high = 0x99, .extended = 0xff,};
+FUSES ={
+#if F_CPU == 8000000UL
+	.low = (FUSE_CKSEL0 & FUSE_SUT1),
+#elif F_CPU == 1000000UL
+	.low = (FUSE_CKSEL0 & FUSE_SUT1 & FUSE_CKDIV8),
+#else
+#error Unsupported F_CPU value
+#endif
+	.high = HFUSE_DEFAULT & FUSE_EESAVE,
+	.extended = 0xFF,
+};
 
 /* Save the default settings into program flash memory */
 const uint8_t default_mac_address[8] PROGMEM = {0x02, 0x12, 0x13, 0xff, 0xfe, 0x14, 0x15, 0x16};
@@ -244,10 +274,9 @@ const uint8_t default_txpower PROGMEM = RF230_MAX_TX_POWER;
 const uint8_t default_txpower PROGMEM = 0;
 #endif
 
-#if JACKDAW_CONF_RANDOM_MAC
-#include "rng.h"
 static void
 generate_new_eui64(uint8_t eui64[8]) {
+#if JACKDAW_CONF_RANDOM_MAC
 	eui64[0] = 0x02;
 	eui64[1] = rng_get_uint8();
 	eui64[2] = rng_get_uint8();
@@ -256,126 +285,106 @@ generate_new_eui64(uint8_t eui64[8]) {
 	eui64[5] = rng_get_uint8();
 	eui64[6] = rng_get_uint8();
 	eui64[7] = rng_get_uint8();
+#else
+    // TODO: Read directly from default_mac_address...?
+	eui64[0] = 0x02;
+	eui64[1] = 0x12;
+	eui64[2] = 0x13;
+	eui64[3] = 0xFF;
+	eui64[4] = 0xFE;
+	eui64[5] = 0x14;
+	eui64[6] = 0x15;
+	eui64[7] = 0x16;
+#endif
 }
-#endif /* JACKDAW_CONF_RANDOM_MAC */
 
-#if !JACKDAW_CONF_USE_SETTINGS
-/****************************No settings manager*****************************/
-/* If not using the settings manager, put the default values into EEMEM
- * These can be manually changed and kept over program reflash.
- * The channel and bit complement are used to check EEMEM integrity,
- * If corrupt all values will be rewritten with the default flash values.
- * To make this work, get the channel before anything else.
- */
 
-uint8_t eemem_mac_address[8] EEMEM = {0x02, 0x12, 0x13, 0xff, 0xfe, 0x14, 0x15, 0x16};
+static uint8_t get_channel_from_eeprom() {
+#if JACKDAW_CONF_USE_SETTINGS
+	uint8_t chan = settings_get_uint8(SETTINGS_KEY_CHANNEL, 0);
+	if(!chan)
+		chan = RF_CHANNEL;
+	return chan;
+#else
+	uint8_t eeprom_channel;
+	uint8_t eeprom_check;
+
+	eeprom_channel = eeprom_read_byte((uint8_t *)9);
+	eeprom_check = eeprom_read_byte((uint8_t *)10);
+
+	if(eeprom_channel==~eeprom_check)
+		return eeprom_channel;
+
 #ifdef CHANNEL_802_15_4
-uint8_t eemem_channel[2] EEMEM = {CHANNEL_802_15_4, ~CHANNEL_802_15_4};
+	return(CHANNEL_802_15_4);
 #else
-uint8_t eemem_channel[2] EMEM = {26, ~26};
+	return 26;
 #endif
-#ifdef IEEE802154_PANID
-uint16_t eemem_panid EEMEM = IEEE802154_PANID;
-#else
-uint16_t eemem_panid EEMEM = 0xABCD;
+
 #endif
-#ifdef IEEE802154_PANADDR
-uint16_t eemem_panaddr EEMEM = IEEE802154_PANADDR;
-#else
-uint16_t eemem_panaddr EEMEM = 0;
-#endif
-#ifdef RF230_MAX_TX_POWER
-uint8_t eemem_txpower EEMEM = RF230_MAX_TX_POWER;
-#else
-uint8_t eemem_txpower EEMEM = 0;
-#endif
-static uint8_t get_channel_from_eeprom() {
-	uint8_t x[2];
-	*(uint16_t *)x = eeprom_read_word ((uint16_t *)&eemem_channel);
-    if((uint8_t)x[0]!=(uint8_t)~x[1]) {//~x[1] can promote comparison to 16 bit
-/* Verification fails, rewrite everything */
-    uint8_t mac[8];
-#if JACKDAW_CONF_RANDOM_MAC
-    PRINTA("Generating random MAC address.\n");
-    generate_new_eui64(&mac);
-#else
-    {uint8_t i; for (i=0;i<8;i++) mac[i] = pgm_read_byte_near(default_mac_address+i);}
-#endif
-	eeprom_write_block(&mac,  &eemem_mac_address, 8);
-  	eeprom_write_word(&eemem_panid  , pgm_read_word_near(&default_panid));
-   	eeprom_write_word(&eemem_panaddr, pgm_read_word_near(&default_panaddr));
-    eeprom_write_byte(&eemem_txpower, pgm_read_byte_near(&default_txpower));
-    x[0] = pgm_read_byte_near(&default_channel);
-    x[1]= ~x[0];
-    eeprom_write_word((uint16_t *)&eemem_channel, *(uint16_t *)x);    
-  }
-  return x[0];
-}
-static bool get_eui64_from_eeprom(uint8_t macptr[8]) {
-	eeprom_read_block ((void *)macptr, &eemem_mac_address, 8);
-	return macptr[0]!=0xFF;
-}
-static uint16_t get_panid_from_eeprom(void) {
-	return eeprom_read_word(&eemem_panid);
-}
-static uint16_t get_panaddr_from_eeprom(void) {
-	return eeprom_read_word (&eemem_panaddr);
-}
-static uint8_t get_txpower_from_eeprom(void)
-{
-	return eeprom_read_byte(&eemem_txpower);
+
 }
 
-#else /* !JACKDAW_CONF_USE_SETTINGS */
-/******************************Settings manager******************************/
-static uint8_t get_channel_from_eeprom() {
-	uint8_t x = settings_get_uint8(SETTINGS_KEY_CHANNEL, 0);
-	if(!x) x = pgm_read_byte_near(&default_channel);
-	return x;
-}
-static bool get_eui64_from_eeprom(uint8_t macptr[8]) {
+static bool
+get_eui64_from_eeprom(uint8_t macptr[8]) {
+#if JACKDAW_CONF_USE_SETTINGS
 	size_t size = 8;
-	if(settings_get(SETTINGS_KEY_EUI64, 0, (unsigned char*)macptr, &size)==SETTINGS_STATUS_OK) {
-      PRINTD("<=Get EEPROM MAC address.\n");
-      return true;		
-    }
-#if JACKDAW_CONF_RANDOM_MAC
-    PRINTA("--Generating random MAC address.\n");
-    generate_new_eui64(macptr);
-#else
-    {uint8_t i;for (i=0;i<8;i++) macptr[i] = pgm_read_byte_near(default_mac_address+i);}
+
+#if TESTING_EUI64_ADDRESSES
+	macptr[0]=0x00;
+	macptr[1]=0x11;
+	macptr[2]=0x22;
+	macptr[3]=0x33;
+	macptr[4]=0x44;
+	macptr[5]=0x55;
+	macptr[6]=0x66;
+	macptr[7]=0x77;
+	goto bail;
 #endif
-    settings_add(SETTINGS_KEY_EUI64,(unsigned char*)macptr,8);
-    PRINTA("->Set EEPROM MAC address.\n");
+
+	if(settings_get(SETTINGS_KEY_EUI64, 0, (unsigned char*)macptr, &size)==SETTINGS_STATUS_OK)
+		goto bail;
+
+#endif
+	// Fallback to reading the traditional mac address
+	eeprom_read_block ((void *)macptr,  0, 8);
+bail:
+	return !(macptr[0]&(MULTICAST_BIT_MASK|TRANSLATE_BIT_MASK)); // If multicast or translate bit is set, we know it's bogus.
+}
+
+static bool
+set_eui64_to_eeprom(const uint8_t macptr[8]) {
+#if JACKDAW_CONF_USE_SETTINGS
+	return settings_set(SETTINGS_KEY_EUI64, macptr, 8)==SETTINGS_STATUS_OK;
+#else
+	eeprom_write_block((void *)macptr,  &mac_address, 8);
 	return true;
+#endif
 }
-static uint16_t get_panid_from_eeprom(void) {
-    uint16_t x;
-    if (settings_check(SETTINGS_KEY_PAN_ID,0)) {
-        x = settings_get_uint16(SETTINGS_KEY_PAN_ID,0);
-        PRINTD("<-Get EEPROM PAN ID of %04x.\n",x);
-    } else {
-	    x=pgm_read_word_near(&default_panid);
-        if (settings_add_uint16(SETTINGS_KEY_PAN_ID,x)==SETTINGS_STATUS_OK) {
-          PRINTA("->Set EEPROM PAN ID to %04x.\n",x);
-        }
-    }
+static uint16_t
+get_panid_from_eeprom(void) {
+#if JACKDAW_CONF_USE_SETTINGS
+	uint16_t x = settings_get_uint16(SETTINGS_KEY_PAN_ID, 0);
+	if(!x)
+		x = IEEE802154_PANID;
 	return x;
+#else
+	// TODO: Writeme!
+	return IEEE802154_PANID;
+#endif
 }
-static uint16_t get_panaddr_from_eeprom(void) {
-    uint16_t x;
-    if (settings_check(SETTINGS_KEY_PAN_ADDR,0)) {
-        x = settings_get_uint16(SETTINGS_KEY_PAN_ADDR,0);
-        PRINTD("<-Get EEPROM PAN address of %04x.\n",x);
-    } else {
-	    x=pgm_read_word_near(&default_panaddr);
-        if (settings_add_uint16(SETTINGS_KEY_PAN_ADDR,x)==SETTINGS_STATUS_OK) {
-          PRINTA("->Set EEPROM PAN address to %04x.\n",x);
-        }
-    }        
-	return x;
+static uint16_t
+get_panaddr_from_eeprom(void) {
+#if JACKDAW_CONF_USE_SETTINGS
+	return settings_get_uint16(SETTINGS_KEY_PAN_ADDR, 0);
+#else
+	// TODO: Writeme!
+	return 0;
+#endif
 }
-static uint8_t get_txpower_from_eeprom(void) {
+
+static uint8_t
+get_txpower_from_eeprom(void) {
     uint8_t x;
     if (settings_check(SETTINGS_KEY_TXPOWER,0)) {
         x = settings_get_uint8(SETTINGS_KEY_TXPOWER,0);
@@ -383,17 +392,15 @@ static uint8_t get_txpower_from_eeprom(void) {
     } else {
 	    x=pgm_read_byte_near(&default_txpower);
         if (settings_add_uint8(SETTINGS_KEY_TXPOWER,x)==SETTINGS_STATUS_OK) {
-          PRINTA("->Set EEPROM tx power of %d. (0=max)\n",x);
+            PRINTA("->Set EEPROM tx power of %d. (0=max)\n",x);
         }
     }
 	return x;
 }
-#endif /* !JACKDAW_CONF_USE_SETTINGS */
 
 /*-------------------------------------------------------------------------*/
 /*-----------------------------Low level initialization--------------------*/
 static void initialize(void) {
-
   watchdog_init();
   watchdog_start();
 
@@ -441,7 +448,7 @@ uint16_t p=(uint16_t)&__bss_end;
   /* Redirect stdout to second port */
   rs232_redirect_stdout(RS232_PORT_0);
 #if ANNOUNCE
-  PRINTA("\n\n*******Booting %s*******\n",CONTIKI_VERSION_STRING);
+  printf_P(PSTR("\n\n\n********BOOTING CONTIKI*********\n"));
 #endif
 #endif
 	
@@ -453,41 +460,9 @@ uint16_t p=(uint16_t)&__bss_end;
   /* Process subsystem. */
   process_init();
 
-  /* etimer process must be started before USB or ctimer init */
+  /* etimer process must be started before ctimer init */
   process_start(&etimer_process, NULL);
-  /* Now we can start USB enumeration */
-  process_start(&usb_process, NULL);
-
-  /* Start CDC enumeration, bearing in mind that it may fail */
-  /* Hopefully we'll get a stdout for startup messages, if we don't already */
-#if USB_CONF_SERIAL
-  process_start(&cdc_process, NULL);
-{unsigned short i;
-  for (i=0;i<65535;i++) {
-    process_run();
-    watchdog_periodic();
-    if (stdout) break;
-  }
-#if !USB_CONF_RS232
-  PRINTA("\n\n*******Booting %s*******\n",CONTIKI_VERSION_STRING);
-#endif
-}
-#endif
-  if (!stdout) Led3_on();
   
-#if RF230BB
-#if JACKDAW_CONF_USE_SETTINGS
-  PRINTA("Settings manager will be used.\n");
-#else
-{uint8_t x[2];
-	*(uint16_t *)x = eeprom_read_word((uint16_t *)&eemem_channel);
-	if((uint8_t)x[0]!=(uint8_t)~x[1]) {
-        PRINTA("Invalid EEPROM settings detected. Rewriting with default values.\n");
-        get_channel_from_eeprom();
-    }
-}
-#endif
-
   ctimer_init();
   /* Start radio and radio receive process */
   /* Note this starts RF230 process, so must be done after process_init */
@@ -495,27 +470,47 @@ uint16_t p=(uint16_t)&__bss_end;
 
   /* Set addresses BEFORE starting tcpip process */
 
-  memset(&tmp_addr, 0, sizeof(rimeaddr_t));
+  memset(&uip_lladdr, 0, sizeof(rimeaddr_t));
+  if(!get_eui64_from_eeprom(uip_lladdr.addr)) {
+    // It doesn't look like we have a valid EUI-64 address
+	// so let's try to make a new one from scratch.
+    Leds_off();
+    Led2_on();
+    generate_new_eui64(uip_lladdr.addr);
+	if(!set_eui64_to_eeprom(uip_lladdr.addr)) {
+		watchdog_periodic();
+		int i;
+		for(i=0;i<20;i++) {
+			Led1_toggle();
+			_delay_ms(100);
+		}
+		Led1_off();
+	}
+	Led2_off();
+  }
 
-  if(get_eui64_from_eeprom(tmp_addr.u8));
-   
-  //Fix MAC address
-  init_net();
+  { // Set up the MAC address for the USB ethernet connection.
+    uint8_t eui48[6];
+    mac_createEthernetAddr(eui48,&uip_lladdr);
+    usb_eth_set_mac_address(eui48);
+  }
 
-#if UIP_CONF_IPV6
-  memcpy(&uip_lladdr.addr, &tmp_addr.u8, 8);
-#endif
+  // macLongAddr is used by sicslow_ethernet.
+  // We are setting it below where we set the USB MAC address so that
+  // if UIP_CONF_AUTO_SUBSTITUTE_LOCAL_MAC_ADDR happens to be set we
+  // are still able to update the USB mac address correctly.
+  memcpy(&macLongAddr, &uip_lladdr.addr, 8);
 
   rf230_set_pan_addr(
 	get_panid_from_eeprom(),
 	get_panaddr_from_eeprom(),
-	(uint8_t *)&tmp_addr.u8
+	(uint8_t *)&uip_lladdr.addr
   );
   
   rf230_set_channel(get_channel_from_eeprom());
   rf230_set_txpower(get_txpower_from_eeprom());
 
-  rimeaddr_set_node_addr(&tmp_addr); 
+  rimeaddr_set_node_addr((void*)&macLongAddr);
 
   /* Initialize stack protocols */
   queuebuf_init();
@@ -524,7 +519,7 @@ uint16_t p=(uint16_t)&__bss_end;
   NETSTACK_NETWORK.init();
 
 #if ANNOUNCE
-  PRINTA("MAC address %x:%x:%x:%x:%x:%x:%x:%x\n\r",tmp_addr.u8[0],tmp_addr.u8[1],tmp_addr.u8[2],tmp_addr.u8[3],tmp_addr.u8[4],tmp_addr.u8[5],tmp_addr.u8[6],tmp_addr.u8[7]);
+  PRINTA("MAC address %x:%x:%x:%x:%x:%x:%x:%x\n\r",uip_lladdr.addr[0],uip_lladdr.addr[1],uip_lladdr.addr[2],uip_lladdr.addr[3],uip_lladdr.addr[4],uip_lladdr.addr[5],uip_lladdr.addr[6],uip_lladdr.addr[7]);
   PRINTA("%s %s, channel %u",NETSTACK_MAC.name, NETSTACK_RDC.name,rf230_get_channel());
   if (NETSTACK_RDC.channel_check_interval) {
     unsigned short tmp;
@@ -551,13 +546,9 @@ uint16_t p=(uint16_t)&__bss_end;
 #endif
 #endif /* UIP_CONF_IPV6_RPL */
 
-#else  /* RF230BB */
-/* The order of starting these is important! */
-  process_start(&mac_process, NULL);
-  process_start(&tcpip_process, NULL);
-#endif /* RF230BB */
+  /* Setup USB */
+  process_start(&usb_process, NULL);
 
-  /* Start ethernet network and storage process */
   process_start(&usb_eth_process, NULL);
 #if USB_CONF_STORAGE
   process_start(&storage_process, NULL);
@@ -589,11 +580,11 @@ Leds_off();
 int
 main(void)
 {
-  /* GCC depends on register r1 set to 0 (?) */
-  asm volatile ("clr r1");
-  
   /* Initialize in a subroutine to maximize stack space */
   initialize();
+
+	/* Autostart other processes */
+	autostart_start(autostart_processes);
 
 #if DEBUG
 {struct process *p;
