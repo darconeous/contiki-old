@@ -1361,7 +1361,6 @@ output(uip_lladdr_t *localdest)
 {
   /* The MAC address of the destination of the packet */
   rimeaddr_t dest;
-  u16_t processed_ip_len; // Redefined here in local scope so as to not interfere with inbound fragment reassembly.
 
   /* Number of bytes processed. */
   uint16_t processed_ip_out_len;
@@ -1603,7 +1602,7 @@ input(void)
 /*       frag_tag = uip_ntohs(RIME_FRAG_BUF->tag); */
       frag_tag = GET16(RIME_FRAG_PTR, RIME_FRAG_TAG);
       PRINTFI("totsize %d, tag %d, fragsize %d, offset %d bytes)\n",
-             frag_size, frag_tag,packetbuf_datalen() - rime_hdr_len, (u16_t)(frag_offset << 3));
+             frag_size, frag_tag,packetbuf_datalen() - rime_hdr_len, (uint16_t)(frag_offset << 3));
       rime_hdr_len += SICSLOWPAN_FRAG1_HDR_LEN;
       /*      printf("frag1 %d %d\n", reass_tag, frag_tag);*/
       first_fragment = 1;
@@ -1618,7 +1617,7 @@ input(void)
       frag_tag = GET16(RIME_FRAG_PTR, RIME_FRAG_TAG);
       frag_size = GET16(RIME_FRAG_PTR, RIME_FRAG_DISPATCH_SIZE) & 0x07ff;
       PRINTFI("totsize %d, tag %d, fragsize %d, offset %d bytes)\n",
-             frag_size, frag_tag,packetbuf_datalen() - rime_hdr_len, (u16_t)(frag_offset << 3));
+             frag_size, frag_tag,packetbuf_datalen() - rime_hdr_len, (uint16_t)(frag_offset << 3));
       rime_hdr_len += SICSLOWPAN_FRAGN_HDR_LEN;
 
       /* If this is the last fragment, we may shave off any extrenous
@@ -1642,7 +1641,7 @@ input(void)
 	   && rimeaddr_cmp(&frag_sender, packetbuf_addr(PACKETBUF_ADDR_SENDER))
 	) {
       PRINTFI("sicslowpan input: Got start of new fragmented packet, dropping previous packet.\n");
-	  processed_ip_len = 0;
+	  processed_ip_in_len = 0;
 	  sicslowpan_len = 0;
 	} else
     if((frag_size > 0 &&
@@ -1657,7 +1656,7 @@ input(void)
       PRINTFI("sicslowpan input: Dropping 6lowpan packet that is not a fragment of the packet currently being reassembled\n");
       return;
     }
-  } else if(processed_ip_len == 0) {
+  } else if(processed_ip_in_len == 0) {
     /*
      * reassembly is off
      * start it if we received a fragment
