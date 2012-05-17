@@ -6,6 +6,8 @@ all: ravenusbstick
 CONTIKI_NO_NET=1
 #UIP_CONF_IPV6=1
 
+CONTIKI_TARGET_SOURCEFILES += cdc_task.c sicslow_ethernet.c
+
 CONTIKI = ../..
 
 CFLAGS += -DJACKDAW=1
