@@ -1192,8 +1192,12 @@ uip_process(uint8_t flag)
     }
   }
 #else /* UIP_CONF_ROUTER */
+  // TODO: Add promiscuous mode...?
   if(!uip_ds6_is_my_addr(&UIP_IP_BUF->destipaddr) &&
      !uip_ds6_is_my_maddr(&UIP_IP_BUF->destipaddr) &&
+#if UIP_CONF_LOOPBACK_INTERFACE
+	 !uip_is_addr_loopback(&UIP_IP_BUF->destipaddr) &&
+#endif
      !uip_is_addr_mcast(&UIP_IP_BUF->destipaddr)) {
     PRINTF("Dropping packet, not for me\n");
     UIP_STAT(++uip_stat.ip.drop);
@@ -1358,6 +1362,7 @@ uip_process(uint8_t flag)
   if(uip_icmp6chksum() != 0xffff) {
     UIP_STAT(++uip_stat.icmp.drop);
     UIP_STAT(++uip_stat.icmp.chkerr);
+    PRINTF("icmpv6: bad checksum: 0x%04x\n\r",uip_icmp6chksum());
     UIP_LOG("icmpv6: bad checksum.");
     PRINTF("icmpv6: bad checksum.");
     goto drop;
@@ -1445,18 +1450,17 @@ uip_process(uint8_t flag)
      UDP/IP headers, but let the UDP application do all the hard
      work. If the application sets uip_slen, it has a packet to
      send. */
+
+  uip_len -= UIP_IPUDPH_LEN;
 #if UIP_UDP_CHECKSUMS
-  uip_len = uip_len - UIP_IPUDPH_LEN;
-  uip_appdata = &uip_buf[UIP_IPUDPH_LEN + UIP_LLH_LEN];
-  if(UIP_UDP_BUF->udpchksum != 0 && uip_udpchksum() != 0xffff) {
+  uip_appdata = &uip_buf[UIP_LLH_LEN + UIP_IPUDPH_LEN];
+  if((UIP_UDP_BUF->udpchksum != 0) && (uip_udpchksum() != 0xffff)) {
     UIP_STAT(++uip_stat.udp.drop);
     UIP_STAT(++uip_stat.udp.chkerr);
     PRINTF("udp: bad checksum 0x%04x 0x%04x\n", UIP_UDP_BUF->udpchksum,
            uip_udpchksum());
     goto drop;
   }
-#else /* UIP_UDP_CHECKSUMS */
-  uip_len = uip_len - UIP_IPUDPH_LEN;
 #endif /* UIP_UDP_CHECKSUMS */
 
   /* Make sure that the UDP destination port number is not zero. */
@@ -1505,11 +1509,10 @@ uip_process(uint8_t flag)
   UIP_UDP_APPCALL();
 
  udp_send:
-  PRINTF("In udp_send\n");
-
   if(uip_slen == 0) {
     goto drop;
   }
+  PRINTF("In udp_send\n");
   uip_len = uip_slen + UIP_IPUDPH_LEN;
 
   /* For IPv6, the IP length field does not include the IPv6 IP header

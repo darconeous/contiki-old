@@ -528,7 +528,8 @@ uip_ds6_prefix_add(uip_ipaddr_t *ipaddr, uint8_t ipaddrlen,
     }
     PRINTF("Adding prefix ");
     PRINT6ADDR(&locprefix->ipaddr);
-    PRINTF("length %u, vlifetime%lu\n", ipaddrlen, interval);
+    PRINTF("length %u, vlifetime %lu\n", ipaddrlen, interval);
+	return locprefix;
   }
   return NULL;
 }
@@ -598,6 +599,9 @@ uip_ds6_addr_add(uip_ipaddr_t *ipaddr, unsigned long vlifetime, uint8_t type)
 #endif /* UIP_ND6_DEF_MAXDADNS > 0 */
     uip_create_solicited_node(ipaddr, &loc_fipaddr);
     uip_ds6_maddr_add(&loc_fipaddr);
+    PRINTF("Adding address ");
+    PRINT6ADDR(&locaddr->ipaddr);
+    PRINTF(" vlifetime %lu\n", vlifetime);
     return locaddr;
   }
   return NULL;
