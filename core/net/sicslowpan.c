@@ -1331,7 +1331,7 @@ send_packet(rimeaddr_t *dest)
   packetbuf_set_addr(PACKETBUF_ADDR_RECEIVER, dest);
 
   /* This needs to be explicitly set here for bridge mode to work */
-  packetbuf_set_addr(PACKETBUF_ADDR_SENDER,&uip_lladdr);
+  packetbuf_set_addr(PACKETBUF_ADDR_SENDER,(void*)&uip_lladdr);
 
   /* Force acknowledge from sender (test hardware autoacks) */
 #if SICSLOWPAN_CONF_ACK_ALL
