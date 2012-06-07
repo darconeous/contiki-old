@@ -70,8 +70,8 @@ CONTIKI_CPU=$(CONTIKI)/cpu/x86
 
 ### Compiler arguments
 #CC = gcc
-CFLAGSNO = $(EXTRA_CC_ARGS) -Wall -g -I/usr/local/include -DCLASSNAME=$(CLASSNAME)
-CFLAGS   = $(CFLAGSNO)
+CFLAGSNO += $(EXTRA_CC_ARGS) -Wall -g -I/usr/local/include -DCLASSNAME=$(CLASSNAME)
+CFLAGS   += $(CFLAGSNO)
 
 ifeq ($(UIP_CONF_IPV6),1)
   CFLAGS += -DWITH_UIP6=1
