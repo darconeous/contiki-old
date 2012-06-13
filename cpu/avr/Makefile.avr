@@ -141,6 +141,12 @@ endif
 %.ihex: %.out
 	$(OBJCOPY) $^ -O ihex $@
 
+%.hex: %.$(TARGET)
+	$(OBJCOPY) $^ -j .text -j .data -O ihex $@
+
+%.ihex: %.$(TARGET)
+	$(OBJCOPY) $^ -O ihex $@
+
 # Add a namelist to the kernel
 %.out: %.co $(PROJECT_OBJECTFILES) contiki-$(TARGET).a
 	cp ${CONTIKI}/tools/empty-symbols.c symbols.c
