@@ -30,6 +30,7 @@ AVRDUDE_PORT=usb
 #AVRDUDE_OPTIONS=-V
 AVRDUDE_OPTIONS=
 
+AVRDUDE_MCU=m1284p
 
 include $(CONTIKIAVR)/Makefile.avr
 include $(CONTIKIAVR)/radio/Makefile.radio
