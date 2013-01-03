@@ -179,7 +179,7 @@ sprint_ip6(uip_ip6addr_t addr)
 #endif /* UIP_CONF_IPV6 */
 /*---------------------------------------------------------------------------*/
 int
-main(void)
+main(int argc, char* argv[])
 {
   clock_init();
 #if UIP_CONF_IPV6
@@ -229,6 +229,11 @@ main(void)
 #endif
 
   procinit_init();
+
+//  printf("Waiting for keypress\n");
+//  getchar();
+//  printf("Continuing...\n");
+
   autostart_start(autostart_processes); 
 
   /* Set default IP addresses if not specified */

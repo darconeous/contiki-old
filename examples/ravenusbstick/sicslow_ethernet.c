@@ -236,7 +236,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 #include "settings.h"
 #endif
 
@@ -296,11 +296,11 @@ void mac_ethernetSetup(void)
   usbstick_mode.raw = 0;
   usbstick_mode.sneeze=0;
 
-#if JACKDAW_CONF_USE_SETTINGS
-  usbstick_mode.sicslowpan = settings_get_bool_with_default('sl',0,usbstick_mode.sicslowpan);
-  usbstick_mode.sendToRf = settings_get_bool_with_default('rf',0,usbstick_mode.sendToRf);
-  usbstick_mode.translate = settings_get_bool_with_default('tr',0,usbstick_mode.translate);
-  usbstick_mode.raw = settings_get_bool_with_default('ra',0,usbstick_mode.raw);
+#if CONTIKI_CONF_SETTINGS_MANAGER
+  usbstick_mode.sicslowpan = settings_get_bool_with_default(TCC('s','l'),0,usbstick_mode.sicslowpan);
+  usbstick_mode.sendToRf = settings_get_bool_with_default(TCC('r','f'),0,usbstick_mode.sendToRf);
+  usbstick_mode.translate = settings_get_bool_with_default(TCC('t','r'),0,usbstick_mode.translate);
+  usbstick_mode.raw = settings_get_bool_with_default(TCC('r','a'),0,usbstick_mode.raw);
 #endif
 }
 

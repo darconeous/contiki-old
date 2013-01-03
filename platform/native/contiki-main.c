@@ -47,10 +47,6 @@
 
 #include "net/uip.h"
 
-#include "dev/button-sensor.h"
-#include "dev/pir-sensor.h"
-#include "dev/vib-sensor.h"
-
 #if WITH_UIP6
 #include "net/uip-ds6.h"
 #endif /* WITH_UIP6 */
@@ -65,6 +61,10 @@
 
 static const struct select_callback *select_callback[SELECT_MAX];
 static int select_max = 0;
+
+#include "dev/button-sensor.h"
+#include "dev/pir-sensor.h"
+#include "dev/vib-sensor.h"
 
 SENSORS(&pir_sensor, &vib_sensor, &button_sensor);
 

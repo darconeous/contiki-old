@@ -94,7 +94,7 @@ AR       = avr-ar
 ELF_SIZE = avr-size -C --mcu=$(MCU)
 OBJCOPY  = avr-objcopy
 STRIP    = avr-strip
-CFLAGSNO = -Wall -mmcu=$(MCU) -gdwarf-2 -fno-strict-aliasing \
+CFLAGSNO = -Wall -mmcu=$(MCU) -g -fno-strict-aliasing \
 			-Wno-unknown-pragmas \
             -I$(CONTIKI)/platform/$(TARGET) \
             -I. -I$(CONTIKI)/core -I$(CONTIKI_CPU) $(USB_INCLUDES) \

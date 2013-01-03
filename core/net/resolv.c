@@ -275,7 +275,7 @@ struct namemap {
   unsigned long expiration;
   uint8_t err;
 #if RESOLV_CONF_SUPPORTS_MDNS
-  bool is_mdns;
+  uint8_t is_mdns;
 #endif
   uip_ipaddr_t ipaddr;
   char name[RESOLV_CONF_MAX_DOMAIN_NAME_SIZE+1];
@@ -785,13 +785,13 @@ newdata(void)
 
 #if RESOLV_CONF_SUPPORTS_MDNS
     if(!namemapptr && name) {
+      int8_t available_i=RESOLV_ENTRIES;
       if(strlen(name)>RESOLV_CONF_MAX_DOMAIN_NAME_SIZE) {
         DEBUG_PRINTF("resolver: MDNS name too big to cache.\n");
         goto skip_to_next_answer;
       }
       // For MDNS, we need to actually look up the name we
       // are looking for.
-      int8_t available_i=RESOLV_ENTRIES;
       for(i = 0; i < RESOLV_ENTRIES; ++i) {
         namemapptr = &names[i];
         if(0==strcasecmp(namemapptr->name,name))
@@ -1197,7 +1197,12 @@ resolv_found(char *name, uip_ipaddr_t *ipaddr)
 
       // Append the last three hex parts of the link-level address.
       for(i=0;i<3;i++) {
-        snprintf(resolv_hostname,sizeof(resolv_hostname),"%s-%02x",resolv_hostname,uip_lladdr.addr[(UIP_LLADDR_LEN-3)+i]);
+        uint8_t val = uip_lladdr.addr[(UIP_LLADDR_LEN-3)+i];
+		char append_str[4]="-XX";
+		append_str[2]=((val&0xf)>9)?'a':'0'+(val&0xF);
+		val >>= 4;
+		append_str[1]=((val&0xf)>9)?'a':'0'+(val&0xF);
+		strncat(resolv_hostname,append_str,sizeof(resolv_hostname)-strlen(resolv_hostname));
       }
 
       // TODO: we must wait another 5 seconds before trying again.

@@ -76,17 +76,11 @@ typedef unsigned long clock_time_t;
 #define CLOCK_LT(a,b)  ((signed long)((a)-(b)) < 0)
 #define INFINITE_TIME 0xffffffff
 #endif
+
 /* These routines are not part of the contiki core but can be enabled in cpu/avr/clock.c */
 void clock_delay_msec(uint16_t howlong);
 void clock_adjust_ticks(clock_time_t howmany);
 
-/* Use EEPROM settings manager, or hard-coded EEPROM reads? */
-/* Generate random MAC address on first startup? */
-/* Random number from radio clock skew or ADC noise? */
-#define JACKDAW_CONF_USE_SETTINGS		0
-#define JACKDAW_CONF_RANDOM_MAC         0
-#define RNG_CONF_USE_RADIO_CLOCK	    1
-//#define RNG_CONF_USE_ADC	1
 /* Clock ticks per second */
 #define CLOCK_CONF_SECOND 125
 
@@ -108,10 +102,11 @@ void clock_adjust_ticks(clock_time_t howmany);
 #define COLLECT_CONF_BROADCAST_ANNOUNCEMENT_MAX_TIME CLOCK_CONF_SECOND * 524UL /* Default uses 600UL */
 
 /* Mac address, RF channel, PANID from EEPROM settings manager */
-#define JACKDAW_CONF_USE_SETTINGS		1
+/* Use EEPROM settings manager, or hard-coded EEPROM reads? */
+#define CONTIKI_CONF_SETTINGS_MANAGER		1
 
 /* Generate random MAC address on first startup */
-#define JACKDAW_CONF_RANDOM_MAC			1
+#define CONTIKI_CONF_RANDOM_MAC			1
 
 /* COM port to be used for SLIP connection. Not tested on Jackdaw. */
 #define SLIP_PORT RS232_PORT_0

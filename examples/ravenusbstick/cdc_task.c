@@ -79,7 +79,7 @@ extern uip_ds6_netif_t uip_ds6_if;
 
 #include "rf230bb.h"
 
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 #include "settings.h"
 #endif
 
@@ -222,6 +222,10 @@ void menu_print(void)
 		PRINTF_P(PSTR("*  G        RPL Global Repair     *\n\r"));
 #endif
 		PRINTF_P(PSTR("*  e        Energy Scan           *\n\r"));
+#if CONTIKI_CONF_SETTINGS_MANAGER
+		PRINTF_P(PSTR("*  $        Dump Settings         *\n\r"));
+		PRINTF_P(PSTR("*  !        WIPE ALL SETTINGS     *\n\r"));
+#endif
 #if USB_CONF_STORAGE
 		PRINTF_P(PSTR("*  u        Switch to mass-storage*\n\r"));
 #endif
@@ -289,7 +293,7 @@ void menu_process(char c)
 						PRINTF_P(PSTR("\n\rInvalid input\n\r"));
 					} else {
 						rf230_set_channel(tempchannel);
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 						if(settings_set_uint8(SETTINGS_KEY_CHANNEL, tempchannel)==SETTINGS_STATUS_OK) {                       
                             PRINTF_P(PSTR("\n\rChannel changed to %d and stored in EEPROM.\n\r"),tempchannel);
 						} else {
@@ -361,7 +365,7 @@ void menu_process(char c)
 						PRINTF_P(PSTR("\n\rInvalid input\n\r"));
 					} else {
 #endif
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 						if(settings_set_uint8(SETTINGS_KEY_TXPOWER, tempchannel)==SETTINGS_STATUS_OK) {
 							PRINTF_P(PSTR("\n\rTransmit power changed to %d, and stored in EEPROM.\n\r"),tempchannel);
 						} else {
@@ -440,7 +444,7 @@ void menu_process(char c)
 				PRINTF_P(PSTR("Bringing interface up\n\r"));
 				usb_eth_set_active(1);
 				break;
-#if JACKDAW_CONF_RANDOM_MAC
+#if CONTIKI_CONF_RANDOM_MAC
 			case 'T':
 				// Test "strong" random number generator of R Quattlebaum
                 // This can potentially reboot the stick!
@@ -507,25 +511,26 @@ void menu_process(char c)
 				
 				break;
 
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 			case '$':
 				settings_debug_dump(stdout);
 				break;
-			case '*':
+			case '!':
 				PRINTF_P(PSTR("Wiping all settings. . .\n\r"));
 				settings_wipe();
 				PRINTF_P(PSTR("Done.\n\r"));
 				break;
-#endif // #if JACKDAW_CONF_USE_SETTINGS
+#endif // #if CONTIKI_CONF_SETTINGS_MANAGER
 
 			case 'r':
-				if (usbstick_mode.raw) {
-					PRINTF_P(PSTR("Jackdaw does not capture raw frames\n\r"));
-					usbstick_mode.raw = 0;
-				} else {
+				usbstick_mode.raw = !usbstick_mode.raw;
+#if CONTIKI_CONF_SETTINGS_MANAGER
+				settings_set_uint8(TCC('r','a'),usbstick_mode.raw);
+#endif
+				if (usbstick_mode.raw)
 					PRINTF_P(PSTR("Jackdaw now captures raw frames\n\r"));
-					usbstick_mode.raw = 1;
-				}	
+				else
+					PRINTF_P(PSTR("Jackdaw does not capture raw frames\n\r"));
 				break;
 #if USB_CONF_RS232
 			case 'd':
@@ -550,18 +555,30 @@ void menu_process(char c)
 extern void jackdaw_choose_rdc_driver(uint8_t i);
 			case '1':
 				jackdaw_choose_rdc_driver(0);
+#if CONTIKI_CONF_SETTINGS_MANAGER
+				settings_set_uint8(SETTINGS_KEY_RDC_INDEX,0);
+#endif
 				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
 				break;
 			case '2':
 				jackdaw_choose_rdc_driver(1);
+#if CONTIKI_CONF_SETTINGS_MANAGER
+				settings_set_uint8(SETTINGS_KEY_RDC_INDEX,1);
+#endif
 				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
 				break;
 			case '3':
 				jackdaw_choose_rdc_driver(2);
+#if CONTIKI_CONF_SETTINGS_MANAGER
+				settings_set_uint8(SETTINGS_KEY_RDC_INDEX,2);
+#endif
 				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
 				break;
 			case '4':
 				jackdaw_choose_rdc_driver(3);
+#if CONTIKI_CONF_SETTINGS_MANAGER
+				settings_set_uint8(SETTINGS_KEY_RDC_INDEX,3);
+#endif
 				PRINTF_P(PSTR("RDC Driver Changed To: %s\n"), NETSTACK_CONF_RDC.name);
 				break;
 #endif

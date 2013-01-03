@@ -96,7 +96,7 @@
 #include "dev/watchdog.h"
 #include "dev/usb/usb_drv.h"
 
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 #include "settings.h"
 #endif
 
@@ -276,7 +276,7 @@ const uint8_t default_txpower PROGMEM = 0;
 
 static void
 generate_new_eui64(uint8_t eui64[8]) {
-#if JACKDAW_CONF_RANDOM_MAC
+#if CONTIKI_CONF_RANDOM_MAC
 	eui64[0] = 0x02;
 	eui64[1] = rng_get_uint8();
 	eui64[2] = rng_get_uint8();
@@ -300,7 +300,7 @@ generate_new_eui64(uint8_t eui64[8]) {
 
 
 static uint8_t get_channel_from_eeprom() {
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 	uint8_t chan = settings_get_uint8(SETTINGS_KEY_CHANNEL, 0);
 	if(!chan)
 		chan = RF_CHANNEL;
@@ -327,8 +327,8 @@ static uint8_t get_channel_from_eeprom() {
 
 static bool
 get_eui64_from_eeprom(uint8_t macptr[8]) {
-#if JACKDAW_CONF_USE_SETTINGS
-	size_t size = 8;
+	// Make sure we fail hard if we don't load an address.
+	macptr[0]=0xFF;
 
 #if TESTING_EUI64_ADDRESSES
 	macptr[0]=0x00;
@@ -342,10 +342,15 @@ get_eui64_from_eeprom(uint8_t macptr[8]) {
 	goto bail;
 #endif
 
-	if(settings_get(SETTINGS_KEY_EUI64, 0, (unsigned char*)macptr, &size)==SETTINGS_STATUS_OK)
-		goto bail;
+#if CONTIKI_CONF_SETTINGS_MANAGER
+	{
+		size_t size = 8;
 
+		if(settings_get(SETTINGS_KEY_EUI64, 0, (unsigned char*)macptr, &size)==SETTINGS_STATUS_OK)
+			goto bail;
+	}
 #endif
+
 	// Fallback to reading the traditional mac address
 	eeprom_read_block ((void *)macptr,  0, 8);
 bail:
@@ -354,7 +359,7 @@ bail:
 
 static bool
 set_eui64_to_eeprom(const uint8_t macptr[8]) {
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 	return settings_set(SETTINGS_KEY_EUI64, macptr, 8)==SETTINGS_STATUS_OK;
 #else
 	eeprom_write_block((void *)macptr,  &mac_address, 8);
@@ -363,7 +368,7 @@ set_eui64_to_eeprom(const uint8_t macptr[8]) {
 }
 static uint16_t
 get_panid_from_eeprom(void) {
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 	uint16_t x = settings_get_uint16(SETTINGS_KEY_PAN_ID, 0);
 	if(!x)
 		x = IEEE802154_PANID;
@@ -375,7 +380,7 @@ get_panid_from_eeprom(void) {
 }
 static uint16_t
 get_panaddr_from_eeprom(void) {
-#if JACKDAW_CONF_USE_SETTINGS
+#if CONTIKI_CONF_SETTINGS_MANAGER
 	return settings_get_uint16(SETTINGS_KEY_PAN_ADDR, 0);
 #else
 	// TODO: Writeme!

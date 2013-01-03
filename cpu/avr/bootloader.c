@@ -22,12 +22,10 @@ volatile uint32_t Boot_Key ATTR_NO_INIT;
 
 bool
 bootloader_is_present(void) {
-#if defined(RAMPZ) 
-	return pgm_read_word_far(BOOTLOADER_START_ADDRESS)!=0xFFFF;
-#else
-/* Probably can just return false when < 64K flash */
-//	return pgm_read_word_near(BOOTLOADER_START_ADDRESS)!=0xFFFF;
+#if BOOTLOADER_CONF_NONE
 	return false;
+#else
+	return pgm_read_word_far(BOOTLOADER_START_ADDRESS)!=0xFFFF;
 #endif
 }
 void

@@ -2,16 +2,17 @@
 
 #include "lib/sensors.h"
 #include "dev/button-sensor.h"
-const struct sensors_sensor button_sensor;
-static int status(int type);
-struct sensors_sensor *sensors[1];
-unsigned char sensors_flags[1];
 
+static int status(int type);
+static int value(int type);
+static int configure(int type, int c);
+
+SENSORS_SENSOR(button_sensor, BUTTON_SENSOR, value, configure, status);
 
 static int
 value(int type)
 {
- return 0;
+ return PORTF;
 }
 
 static int
@@ -39,7 +40,4 @@ status(int type)
 	}
 	return 0;
 }
-
-SENSORS_SENSOR(button_sensor, BUTTON_SENSOR,
-	       value, configure, status);
 

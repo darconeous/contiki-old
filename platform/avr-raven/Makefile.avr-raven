@@ -14,7 +14,7 @@ CONTIKIBOARD=.
 CONTIKI_PLAT_DEFS = -DF_CPU=8000000UL -DAUTO_CRC_PADDING=2
 
 MCU=atmega1284p
-AVRDUDE_PROGRAMMER=jtag2
+#AVRDUDE_PROGRAMMER=jtag2
 
 # For usb devices, you may either use PORT=usb, or (e.g. if you have more than one
 # programmer connected) you can use the following trick to find out the serial number:
@@ -27,8 +27,7 @@ AVRDUDE_PORT=usb
 
 # Additional avrdude options
 # Verify off
-#AVRDUDE_OPTIONS=-V
-AVRDUDE_OPTIONS=
+AVRDUDE_OPTIONS=-V
 
 AVRDUDE_MCU=m1284p
 

@@ -56,6 +56,14 @@
 
 #include <stdint.h>
 
+#ifndef CONTIKI_CONF_RANDOM_MAC
+#define CONTIKI_CONF_RANDOM_MAC 1
+#endif
+
+#ifndef CONTIKI_CONF_SETTINGS_MANAGER
+#define CONTIKI_CONF_SETTINGS_MANAGER 1
+#endif
+
 /* The AVR tick interrupt usually is done with an 8 bit counter around 128 Hz.
  * 125 Hz needs slightly more overhead during the interrupt, as does a 32 bit
  * clock_time_t.
@@ -97,7 +105,9 @@ void clock_adjust_ticks(clock_time_t howmany);
 //#define MMEM_CONF_SIZE 256
 
 /* Starting address for code received via the codeprop facility. Not tested on Raven */
+#if !defined(_SYS_TYPES_H)
 typedef unsigned long off_t;
+#endif
 //#define EEPROMFS_ADDR_CODEPROP 0x8000
 
 /* RADIO_CONF_CALIBRATE_INTERVAL is used in rf230bb and clock.c. If nonzero a 256 second interval is used */

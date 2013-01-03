@@ -119,6 +119,10 @@ void rtimercycle(void) {rtimerflag=1;}
 
 uint16_t ledtimer;
 
+#include "lib/sensors.h"
+#include "dev/button-sensor.h"
+SENSORS(&button_sensor);
+
 /*-------------------------------------------------------------------------*/
 /*----------------------Configuration of the .elf file---------------------*/
 #if 1
